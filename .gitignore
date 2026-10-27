@@ -1,0 +1,10 @@
+.kata.local.toml
+.local/
+.env
+.env.*
+!.env.example
+data/
+repositories/
+graphify-out/
+__pycache__/
+.venv/
