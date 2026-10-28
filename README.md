@@ -6,6 +6,11 @@ Code context and revision-bound repository knowledge graphs for engineering.
 the product direction and native Kata binding, not a working graph service,
 populated code corpus or permission to acquire new source assets.
 
+The owner has authorized public publication at
+https://github.com/GSA/the_knowitall and local Forge/Kata onboarding.
+Publication of this design repository does not authorize acquiring or
+publishing any source corpus, graph snapshots or upstream private assets.
+
 ## Why this repository exists
 
 The original plan used SPUD for technical context alongside The Librarian and
@@ -159,6 +164,12 @@ carry their own evidence and disposition; a shared name alone is not an
 `implements` relationship. Engineer composes the answers without becoming a
 third source of truth.
 
+Librarian task `923h` owns the missing association lifecycle: proposal,
+qualification, ambiguity, retained evidence, correction and reassessment when
+either the business source or code revision changes. A previously confirmed
+link is not automatically confirmed for a new snapshot or renamed symbol.
+This remains planned implementation, not a feature supplied by this bootstrap.
+
 ## Document intake shared by all sources
 
 Drive, Atlassian exports and manual uploads should converge on:
@@ -202,6 +213,8 @@ history preserved. Code-context slices:
 
 Engineer coordinates the overall work under `engi-platform#pyzt`; memory
 runtime is `engi-platform#pbqn`, provider consumption is `engi-platform#k4mp`.
+Memory runtime is conditional on `engi-platform#zbww` establishing useful
+incremental value over no memory and simple records; it is not a demo gate.
 Librarian owns its ingestion/entity implementation backlog. Existing
 `spud#3sv9 -> librarian#55nx` still supplies exporter/receiver evidence; it
 does not make SPUD the future business-context product.
@@ -228,7 +241,16 @@ The target demonstration is:
 affected dependency -> Engineer change/review**, plus interrupted-run recovery
 and a changed/deleted source without duplicate evidence or false freshness.
 
+Prioritize `engi-platform#ca6n` to agree shared synthetic fixtures and versioned
+contract examples after the two provider designs. `engi-platform#hk33` owns the
+repeatable system demo/conformance harness: real component boundaries and a
+visible evidence walkthrough, not just mocked packets or a new dashboard.
+The same synthetic scenario can be the system demonstration; real-project
+adaptation and production-readiness claims require separate evidence/approval.
+Fixture stores must be isolated and temporary, never seeded by initialization.
+
 Keep FALCON's legacy corpus/services intact. Acquire code authorization does
 not itself authorize its business documents or a model destination. No real
 repositories, documents, credentials, memories or graph snapshots are seeded
-by this bootstrap. This repository has no remote or publication requirement.
+by this bootstrap. New GSA repositories should use public visibility when
+publication is authorized; this does not change existing private repositories.
