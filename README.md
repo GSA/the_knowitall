@@ -2,14 +2,62 @@
 
 Code context and revision-bound repository knowledge graphs for engineering.
 
-**Status: design/bootstrap, October 27, 2026.** This repository currently holds
-the product direction and native Kata binding, not a working graph service,
-populated code corpus or permission to acquire new source assets.
+**Status: contract defined with a local synthetic slice, October 28, 2026.**
+This repository holds the product direction, the native Kata binding, the
+versioned `knowitall.code-context/v1` contract, and a local Python library
+that implements it against synthetic fixtures. It is not a running graph
+service, holds no populated code corpus, and carries no permission to acquire
+new source assets.
 
 The owner has authorized public publication at
 https://github.com/GSA/the_knowitall and local Forge/Kata onboarding.
 Publication of this design repository does not authorize acquiring or
 publishing any source corpus, graph snapshots or upstream private assets.
+
+## The code-context contract
+
+`knowitall.code-context/v1` is the published provider/consumer boundary. It is
+engine-neutral: no extractor-native record reaches a consumer.
+
+| Path | Contents |
+| --- | --- |
+| `schemas/knowitall.code-context/v1/` | JSON Schemas for the snapshot manifest, query request, query response and shared definitions |
+| `examples/knowitall.code-context/v1/` | Schema-valid manifest, exact request, success response and partial response |
+| `src/knowitall_contract/` | Typed records and validation APIs; schemas and examples ship inside the wheel and load via `importlib.resources` |
+
+Every response names the project, repository, snapshot, commit (or explicitly
+admitted dirty-content) identity, graph generation and raw-artifact digest.
+`current` is a selector only and never appears as evidence. Four query kinds
+are served: `symbol`, `dependencies`, `path` and `source_range`, each returning
+source file and half-open line evidence with content digests.
+
+Status is explicit (`ok`, `partial`, `not_found`, `ambiguous`, `stale`,
+`unavailable`, `invalid_request`). Scope exclusions and inventory or extraction
+failures are reported as machine-readable missing evidence, so a partial answer
+can never be read as repository-wide absence. Results are bounded with visible
+continuations rather than silent truncation. Static calls and imports are
+structural evidence, not proof of runtime behavior or business intent.
+
+### Running the local verification
+
+The slice is a library, not a service. Extraction uses `graphifyy==0.9.96`
+pinned by hash; see [`docs/graphify-dependency.md`](docs/graphify-dependency.md)
+for the verified artifact, licensing and reuse rights, and
+[`docs/local-provider.md`](docs/local-provider.md) for the reproducible offline
+procedure and expected receipts.
+
+```sh
+export PYTHONPATH="/absolute/path/to/test-dependencies:$PWD/src"
+export KNOWITALL_GRAPHIFY_RUNTIME="/absolute/path/to/pinned-graphify-venv"
+python3 scripts/check-contract-examples.py
+python3 -m pytest -q
+```
+
+Tests build temporary Git repositories from checked-in synthetic Python and
+TypeScript files. They acquire, execute and publish nothing external. A passing
+run proves this bounded synthetic contract only: it is not validation against
+Acquire, authorization to ingest it, or evidence of production readiness,
+scale, availability or semantic completeness.
 
 ## Why this repository exists
 
