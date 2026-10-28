@@ -54,6 +54,8 @@ class GraphGeneration:
     runtime_identity: str = RUNTIME_IDENTITY
     config_identity: str = CONFIG_IDENTITY
     model_routes_enabled: bool = False
+    inventory_failures: tuple[tuple[str, str], ...] = ()
+    exclusions: tuple[tuple[str, str], ...] = ()
 
 
 def _range(value: dict, label: str) -> SourceRange:
@@ -139,19 +141,22 @@ def normalize_generation(snapshot: SnapshotManifest, raw_artifact: bytes, *, exp
         if value.get("path") not in admitted:
             raise GenerationValidationError("edge has missing or invalid source locator")
         edges.append(GraphEdge(value["id"], value["source"], value["target"], value["kind"], value["path"], _range(value, "edge"), admitted[value["path"]]))
-    extraction = "partial" if failed else "complete"
+    exclusions = tuple(sorted((item["path"], item["reason"]) for item in snapshot.excluded))
+    extraction = "partial" if failed or exclusions else "complete"
     state = "complete" if snapshot.inventory_complete and extraction == "complete" else "partial"
     limitations = set(failed.values())
+    limitations.update(reason for _, reason in exclusions)
     limitations.update(item.get("reason", "inventory_failure") for item in snapshot.failed)
     coverage = Coverage("complete" if snapshot.inventory_complete else "partial", extraction, state, tuple(sorted(limitations)))
     snapshot_ref = SnapshotRef(snapshot.project_id, snapshot.repository_id, snapshot.snapshot_id, snapshot.commit, snapshot.content_manifest_digest)
     identity = "\0".join((snapshot.snapshot_id, digest, ENGINE_IDENTITY, RUNTIME_IDENTITY, CONFIG_IDENTITY))
     generation_id = "gen-" + hashlib.sha256(identity.encode()).hexdigest()
-    return GraphGeneration(snapshot_ref, generation_id, digest, state, coverage, tuple(sorted(nodes, key=lambda item: item.symbol_id)), tuple(sorted(edges, key=lambda item: item.evidence_id)), tuple(sorted(failed.items())), raw_artifact)
+    inventory_failures = tuple(sorted((item.get("path", "."), item.get("reason", "inventory_failure")) for item in snapshot.failed))
+    return GraphGeneration(snapshot_ref, generation_id, digest, state, coverage, tuple(sorted(nodes, key=lambda item: item.symbol_id)), tuple(sorted(edges, key=lambda item: item.evidence_id)), tuple(sorted(failed.items())), raw_artifact, inventory_failures=inventory_failures, exclusions=exclusions)
 
 
 def extract_generation(snapshot: SnapshotManifest, source_dir: Path, staging_dir: Path, config: GraphifyConfig) -> GraphGeneration:
-    run_graphify(source_dir, staging_dir, config)
+    receipt = run_graphify(source_dir, staging_dir, config)
     artifact_path = staging_dir.resolve() / "graphify-out" / "graph.json"
     try:
         raw_artifact = artifact_path.read_bytes()
@@ -160,10 +165,12 @@ def extract_generation(snapshot: SnapshotManifest, source_dir: Path, staging_dir
     canonical = native_graphify_payload(snapshot, raw_artifact)
     generation = normalize_generation(snapshot, canonical)
     native_digest = "sha256:" + hashlib.sha256(raw_artifact).hexdigest()
-    identity = "\0".join((snapshot.snapshot_id, native_digest, ENGINE_IDENTITY, RUNTIME_IDENTITY, CONFIG_IDENTITY))
+    config_identity = "sha256:" + hashlib.sha256((CONFIG_IDENTITY + "\0" + receipt.executable_digest).encode()).hexdigest()
+    identity = "\0".join((snapshot.snapshot_id, native_digest, receipt.engine_identity, receipt.runtime_identity, config_identity))
     generation_id = "gen-" + hashlib.sha256(identity.encode()).hexdigest()
     return GraphGeneration(
         generation.snapshot, generation_id, native_digest, generation.state,
         generation.coverage, generation.nodes, generation.edges, generation.failed_files,
-        raw_artifact,
+        raw_artifact, receipt.engine_identity, receipt.runtime_identity, config_identity,
+        inventory_failures=generation.inventory_failures, exclusions=generation.exclusions,
     )

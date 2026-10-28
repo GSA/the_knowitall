@@ -62,7 +62,7 @@ def _decode(metadata: bytes, artifact: bytes) -> GraphGeneration:
     coverage = Coverage(coverage_value["inventory"], coverage_value["extraction"], coverage_value["relevant_scope"], tuple(coverage_value["limitations"]))
     nodes = tuple(GraphNode(item["symbol_id"], item["name"], item["path"], SourceRange(**item["source_range"]), item["content_digest"]) for item in value["nodes"])
     edges = tuple(GraphEdge(item["evidence_id"], item["source"], item["target"], item["kind"], item["path"], SourceRange(**item["source_range"]), item["content_digest"]) for item in value["edges"])
-    return GraphGeneration(snapshot, value["generation_id"], value["artifact_digest"], value["state"], coverage, nodes, edges, tuple(tuple(item) for item in value["failed_files"]), artifact, value["engine_identity"], value["runtime_identity"], value["config_identity"], value["model_routes_enabled"])
+    return GraphGeneration(snapshot, value["generation_id"], value["artifact_digest"], value["state"], coverage, nodes, edges, tuple(tuple(item) for item in value["failed_files"]), artifact, value["engine_identity"], value["runtime_identity"], value["config_identity"], value["model_routes_enabled"], tuple(tuple(item) for item in value.get("inventory_failures", ())), tuple(tuple(item) for item in value.get("exclusions", ())))
 
 
 def _write_generation(directory: Path, generation: GraphGeneration) -> None:

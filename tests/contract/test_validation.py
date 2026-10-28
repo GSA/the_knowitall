@@ -79,6 +79,26 @@ def test_response_range_end_must_follow_start():
         validate_query_response(response)
 
 
+def test_partial_response_requires_machine_readable_missing_evidence():
+    response = load_example("dependency-response.json")
+    response["status"] = "partial"
+    response["coverage"]["relevant_scope"] = "partial"
+    response["coverage"]["limitations"] = ["parser_error"]
+
+    with pytest.raises(ContractValidationError, match="missing_evidence"):
+        validate_query_response(response)
+
+
+def test_partial_response_requires_coverage_limitations():
+    response = load_example("dependency-response.json")
+    response["status"] = "partial"
+    response["coverage"]["relevant_scope"] = "partial"
+    response["missing_evidence"] = [{"kind": "extraction", "scope": "src/orders.py", "reason": "parser_error"}]
+
+    with pytest.raises(ContractValidationError, match="coverage.limitations"):
+        validate_query_response(response)
+
+
 def test_response_identity_must_exactly_match_request_identity_when_provided():
     request = load_example("exact-dependency-request.json")
     response = load_example("dependency-response.json")

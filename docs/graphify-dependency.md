@@ -11,7 +11,9 @@ Knowitall's first extractor adapter targets the following immutable artifact:
 - Package metadata license expression: `Apache-2.0`
 - Included notices: `LICENSE` (Apache-2.0), `LICENSE-MIT`, and `NOTICE`
 - Python metadata compatibility: `Requires-Python >=3.10`; the Knowitall floor is Python 3.12.
-- Acceptance runtime observed on Python 3.14: `tree-sitter` 0.25.2, `tree-sitter-python` 0.25.0, and `tree-sitter-typescript` 0.23.2 (plus the distribution's remaining declared base dependencies).
+- Acceptance runtime observed on CPython 3.14/Linux x86_64: all 31 exact distributions and wheel hashes recorded in `requirements/graphify.lock`.
+
+The lock is the complete accepted runtime closure, not just the top-level package. It was generated from concrete wheel bytes and verified by an offline `pip install --no-index --require-hashes --no-deps`. Because several wheels are platform-specific, this lock intentionally applies only to CPython 3.14 on compatible Linux x86_64 systems; another platform requires a separately reviewed complete lock.
 
 The 0.9.96 source distribution's `graphify/` tree, `pyproject.toml`, and all three license/notice files were compared with the recorded source revision: 237 files matched byte-for-byte, with no missing or mismatched files. The source revision declares version 0.9.96. This verifies package-to-source correspondence for the adopted artifact; it does not authorize copying Graphify source into this repository.
 
@@ -21,4 +23,10 @@ The adapter invokes an explicitly configured executable without a shell, using o
 graphify extract <immutable-source> --out <staging-output> --code-only --no-cluster
 ```
 
-No API/model credentials, proxy variables, user configuration, hooks, or network-enrichment options are inherited. Exit zero is only a subprocess receipt; Knowitall separately validates artifact JSON, source binding, locators, endpoints, digests, provenance, and coverage before publication eligibility.
+No API/model credentials, proxy variables, user configuration, hooks, or network-enrichment options are inherited. `GraphifyConfig.executable` is a Python interpreter file inside a dedicated virtual environment built from the lock, and every process starts with `-I -S` so user/system site packages and startup hooks cannot run. The adapter admits exactly one package root, approves the interpreter by SHA-256, and probes the running runtime for Python and all 31 exact distribution versions plus a `graphify` import origin inside that root before extraction. A mismatch fails closed.
+
+Exit zero is only a subprocess receipt; Knowitall separately validates artifact JSON, source binding, locators, endpoints, digests, provenance, and coverage before publication eligibility.
+
+## Runtime integrity scope
+
+This slice verifies *package and version identity* of a locally constructed, lock-built runtime for synthetic conformance. It does not attest the host operating system, the ELF loader, system shared libraries, or filesystem immutability, and it makes no production runtime-integrity claim. Production execution requires a deployment-attested immutable runtime image; that boundary is tracked separately and must be designed with the owning deployment product rather than inferred here.

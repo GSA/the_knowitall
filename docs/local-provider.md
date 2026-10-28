@@ -21,10 +21,18 @@ artifacts recorded in [`graphify-dependency.md`](graphify-dependency.md) and
 engine is `graphifyy==0.9.96`. Do not substitute an unpinned package.
 
 The test environment used for acceptance keeps dependencies under ignored local
-state and points `KNOWITALL_GRAPHIFY_RUNTIME` at the isolated Graphify import
-root. The adapter executes only the fixed `extract ... --code-only --no-cluster`
-route with an allowlisted, credential-free environment. It does not run source
-hooks, builds, macros, or model routes.
+state and points `KNOWITALL_GRAPHIFY_RUNTIME` at the root of a dedicated
+virtual environment built from the complete lock with
+`pip install --no-index --require-hashes --no-deps`. The adapter approves that
+interpreter by digest, probes the 31 exact pinned distributions, and executes
+only the fixed `extract ... --code-only --no-cluster` route with an allowlisted,
+credential-free environment. It does not run source hooks, builds, macros, or
+model routes.
+
+This checks package and version identity for synthetic conformance only. It is
+not host, loader, or filesystem attestation, and it is not a production
+runtime-integrity claim; see
+[`graphify-dependency.md`](graphify-dependency.md).
 
 ## Offline verification
 
@@ -32,7 +40,7 @@ From the repository root, with isolated dependencies available on `PYTHONPATH`:
 
 ```sh
 export PYTHONPATH="/absolute/path/to/test-dependencies:$PWD/src"
-export KNOWITALL_GRAPHIFY_RUNTIME="/absolute/path/to/pinned-graphify-runtime"
+export KNOWITALL_GRAPHIFY_RUNTIME="/absolute/path/to/pinned-graphify-venv"
 python3 scripts/check-contract-examples.py
 python3 -m pytest -q
 python3 -m build

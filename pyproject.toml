@@ -12,6 +12,9 @@ dependencies = ["jsonschema>=4.19,<5"]
 [project.optional-dependencies]
 test = ["pytest>=8,<9", "build>=1.2,<2"]
 
+[tool.hatch.build.targets.sdist]
+exclude = [".superpowers", "pytest-of-*"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/knowitall_contract", "src/knowitall_snapshot", "src/knowitall_graphify", "src/knowitall_publication", "src/knowitall_query"]
 

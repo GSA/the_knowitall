@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from knowitall_contract import validate_query_response
-from knowitall_graphify import GraphifyConfig, extract_generation
+from knowitall_graphify import GraphifyConfig, executable_digest, extract_generation
 from knowitall_publication import PublicationStore
 from knowitall_query import QueryService
 from knowitall_snapshot import SnapshotPolicy, create_snapshot
@@ -15,10 +15,9 @@ pytestmark = pytest.mark.skipif(not RUNTIME, reason="verified pinned Graphify ru
 
 
 def graphify_config(tmp_path: Path) -> GraphifyConfig:
-    wrapper = tmp_path / "graphify"
-    wrapper.write_text(f"#!/bin/sh\nexec python3 -m graphify \"$@\"\n", encoding="utf-8")
-    wrapper.chmod(0o755)
-    return GraphifyConfig(executable=wrapper, python_path=RUNTIME)
+    interpreter = Path(RUNTIME) / "bin" / "python"
+    package_root = Path(RUNTIME) / "lib" / "python3.14" / "site-packages"
+    return GraphifyConfig(executable=interpreter, python_path=str(package_root), expected_executable_digest=executable_digest(interpreter))
 
 
 @pytest.mark.parametrize(

@@ -8,7 +8,7 @@
     "resolved": {"type": ["object", "null"], "additionalProperties": false, "required": ["snapshot_id", "commit", "content_manifest_digest", "generation_id", "artifact_digest"], "properties": {"snapshot_id": {"$ref": "#/$defs/identity"}, "commit": {"$ref": "#/$defs/digest"}, "content_manifest_digest": {"$ref": "#/$defs/digest"}, "generation_id": {"$ref": "#/$defs/identity"}, "artifact_digest": {"$ref": "#/$defs/digest"}}},
     "status": {"enum": ["ok", "partial", "not_found", "ambiguous", "stale", "unavailable", "invalid_request"]},
     "coverage": {"type": "object", "additionalProperties": false, "required": ["inventory", "extraction", "relevant_scope", "limitations"], "properties": {"inventory": {"enum": ["complete", "partial", "unknown"]}, "extraction": {"enum": ["complete", "partial", "unknown"]}, "relevant_scope": {"enum": ["complete", "partial", "unknown"]}, "limitations": {"type": "array", "items": {"type": "string"}}}},
-    "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}}, "ambiguities": {"type": "array", "items": {"type": "object"}},
+    "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}}, "ambiguities": {"type": "array", "items": {"$ref": "#/$defs/symbol"}},
     "missing_evidence": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["kind", "scope", "reason"], "properties": {"kind": {"$ref": "#/$defs/identity"}, "scope": {"$ref": "#/$defs/identity"}, "reason": {"$ref": "#/$defs/identity"}}}},
     "truncated": {"type": "boolean"}, "continuation": {"type": ["string", "null"], "minLength": 1}
   },
