@@ -309,7 +309,8 @@ Deferred to implementation planning or an authorized project instance:
 - storage layout and retention policy;
 - final JSON Schema file decomposition and continuation encoding;
 - exact Graphify artifact hash, runtime version, graph schema, license identifier, and notices after package verification;
-- project-specific repository allowlist, submodule/LFS policy, languages, scale, and freshness requirements; and
+- project-specific repository allowlist, submodule/LFS policy, languages, scale, and freshness requirements;
+- deployment-attested runtime integrity for extractor execution, tracked as `knowitall#d2qt`: this slice verifies extractor package and version identity, not host, loader, or filesystem attestation; and
 - cross-repository release-set semantics, semantic enrichment, hosted access control, and SPUD artifact admission.
 
 None of these deferred choices permits weakening identity, coverage, publication, or failure semantics defined here.

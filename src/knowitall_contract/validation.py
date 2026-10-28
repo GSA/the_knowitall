@@ -56,6 +56,12 @@ def validate_query_request(value: Mapping[str, object]) -> None:
             if field not in selector:
                 raise ContractValidationError(f"selector.{field}: required for exact mode")
     _validate_schema(value, "query-request.schema.json")
+    query = value["query"]
+    if query["kind"] == "source_range":
+        try:
+            SourceRange(query["start"]["line"], query["start"]["column"], query["end"]["line"], query["end"]["column"])
+        except ValueError as error:
+            raise ContractValidationError(f"query range: {error}") from error
 
 
 def _validate_ranges(value: Mapping[str, object]) -> None:
@@ -79,6 +85,11 @@ def validate_query_response(
 ) -> None:
     _validate_schema(value, "query-response.schema.json")
     _validate_ranges(value)
+    if value["status"] == "partial":
+        if not value["missing_evidence"]:
+            raise ContractValidationError("missing_evidence: required for partial status")
+        if not value["coverage"]["limitations"]:
+            raise ContractValidationError("coverage.limitations: required for partial status")
     if expected_request is not None:
         for identity in ("contract", "request_id", "project_id", "repository_id"):
             if value[identity] != expected_request[identity]:

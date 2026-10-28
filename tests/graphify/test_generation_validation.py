@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from knowitall_graphify import GenerationValidationError, normalize_generation
+from knowitall_graphify import GenerationValidationError, normalize_generation, validate_generation
 from knowitall_graphify.normalize import native_graphify_payload
 from knowitall_snapshot import SnapshotPolicy, create_snapshot
 
@@ -83,6 +83,57 @@ def test_incomplete_inventory_makes_generation_partial(snapshot):
     assert generation.coverage.inventory == "partial"
     assert generation.coverage.relevant_scope == "partial"
     assert "listing_failed" in generation.coverage.limitations
+
+
+def test_rejects_partial_inventory_without_machine_readable_failure(snapshot):
+    generation = normalize(snapshot, valid_raw(snapshot))
+    malformed = replace(
+        generation,
+        state="partial",
+        coverage=replace(generation.coverage, inventory="partial", relevant_scope="partial", limitations=("unknown inventory gap",)),
+    )
+
+    with pytest.raises(GenerationValidationError, match="partial inventory requires machine-readable"):
+        validate_generation(malformed)
+
+
+def test_rejects_partial_extraction_without_machine_readable_failure_or_exclusion(snapshot):
+    generation = normalize(snapshot, valid_raw(snapshot))
+    malformed = replace(
+        generation,
+        state="partial",
+        coverage=replace(generation.coverage, extraction="partial", relevant_scope="partial", limitations=("unknown extraction gap",)),
+    )
+
+    with pytest.raises(GenerationValidationError, match="partial extraction requires machine-readable"):
+        validate_generation(malformed)
+
+
+def test_publication_rejects_inventory_failures_with_complete_coverage(snapshot):
+    generation = normalize(snapshot, valid_raw(snapshot))
+    malformed = replace(generation, inventory_failures=((".", "listing_failed"),))
+
+    with pytest.raises(GenerationValidationError, match="inventory failures require partial"):
+        validate_generation(malformed)
+
+
+def test_publication_rejects_failures_missing_from_limitations(snapshot):
+    incomplete = replace(snapshot, inventory_complete=False, failed=({"path": ".", "reason": "listing_failed"},))
+    generation = normalize(incomplete, valid_raw(incomplete))
+    malformed = replace(generation, coverage=replace(generation.coverage, limitations=()))
+
+    with pytest.raises(GenerationValidationError, match="coverage limitations"):
+        validate_generation(malformed)
+
+
+def test_snapshot_exclusion_makes_extraction_partial(snapshot):
+    excluded_snapshot = replace(snapshot, excluded=({"path": "vendor/client", "reason": "submodule_excluded"},))
+    generation = normalize(excluded_snapshot, valid_raw(excluded_snapshot))
+
+    assert generation.state == "partial"
+    assert generation.coverage.extraction == "partial"
+    assert generation.exclusions == (("vendor/client", "submodule_excluded"),)
+    assert "submodule_excluded" in generation.coverage.limitations
 
 
 def test_parser_failure_makes_generation_partial(snapshot):

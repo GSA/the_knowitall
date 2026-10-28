@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from knowitall_graphify import GraphifyConfig, extract_generation
+from knowitall_graphify import GraphifyConfig, GraphifyExecutionError, executable_digest, extract_generation, run_graphify
 from knowitall_snapshot import SnapshotPolicy, create_snapshot
 
 
@@ -13,10 +13,19 @@ pytestmark = pytest.mark.skipif(not RUNTIME, reason="verified pinned Graphify ru
 
 
 def config(tmp_path: Path) -> GraphifyConfig:
-    wrapper = tmp_path / "graphify"
-    wrapper.write_text(f"#!/bin/sh\nexec python3 -m graphify \"$@\"\n")
-    wrapper.chmod(0o755)
-    return GraphifyConfig(executable=wrapper, python_path=RUNTIME)
+    interpreter = Path(RUNTIME) / "bin" / "python"
+    package_root = Path(RUNTIME) / "lib" / "python3.14" / "site-packages"
+    return GraphifyConfig(executable=interpreter, python_path=str(package_root), expected_executable_digest=executable_digest(interpreter))
+
+
+def test_pinned_runtime_rejects_an_unapproved_interpreter(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    value = config(tmp_path)
+    altered = GraphifyConfig(**{**value.__dict__, "expected_executable_digest": "sha256:" + "0" * 64})
+
+    with pytest.raises(GraphifyExecutionError, match="interpreter digest mismatch"):
+        run_graphify(source, tmp_path / "output", altered)
 
 
 @pytest.mark.parametrize(
@@ -47,7 +56,10 @@ def test_real_pinned_extraction_is_offline_source_bound_and_deterministic(make_r
     assert first.artifact_digest == second.artifact_digest
     assert first.generation_id == second.generation_id
     assert first.engine_identity == "graphifyy:0.9.96"
+    assert first.runtime_identity.startswith("python:3.14")
     assert "tree-sitter:0.25.2" in first.runtime_identity
+    assert "tree-sitter-python:0.25.0" in first.runtime_identity
+    assert "tree-sitter-typescript:0.23.2" in first.runtime_identity
     assert first.config_identity.startswith("sha256:")
     assert first.model_routes_enabled is False
     identity = "\0".join((snapshot.snapshot_id, first.artifact_digest, first.engine_identity, first.runtime_identity, first.config_identity))

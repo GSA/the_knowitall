@@ -32,7 +32,7 @@ def make_repo(tmp_path):
         nonlocal counter
         counter += 1
         repo = tmp_path / f"repo-{counter}"
-        shutil.copytree(FIXTURES / fixture, repo)
+        shutil.copytree(FIXTURES / fixture, repo, ignore=shutil.ignore_patterns("__pycache__"))
         git(repo, "init", "-q")
         git(repo, "config", "user.name", "Synthetic Test")
         git(repo, "config", "user.email", "synthetic@example.invalid")
@@ -80,7 +80,7 @@ def published_graph(make_repo, tmp_path):
             {"id": "store.save", "name": "save", "path": paths[1], "start": [1, 1], "end": [3, 1]},
         ]
         if duplicate_names:
-            nodes.append({"id": "other.submit", "name": "submit", "path": paths[1], "start": [4, 1], "end": [5, 1]})
+            nodes.append({"id": "other.submit", "name": "submit", "path": paths[0], "start": [7, 1], "end": [8, 1]})
         processed, failed = list(paths), []
         if partial:
             failed_path = processed.pop()
@@ -103,14 +103,14 @@ def published_graph(make_repo, tmp_path):
 
 @pytest.fixture
 def request_factory():
-    def make(*, request_id="request-1", project="project-a", repository="repo-a", selector=None, symbol="orders.submit", direction="outgoing", kinds=None, continuation=None):
+    def make(*, request_id="request-1", project="project-a", repository="repo-a", selector=None, symbol="orders.submit", direction="outgoing", kinds=None, continuation=None, query=None):
         request = {
             "contract": "knowitall.code-context/v1",
             "request_id": request_id,
             "project_id": project,
             "repository_id": repository,
             "selector": selector or {"mode": "current"},
-            "query": {"kind": "dependencies", "symbol_id": symbol, "direction": direction, "relationship_kinds": kinds or ["calls"]},
+            "query": query or {"kind": "dependencies", "symbol_id": symbol, "direction": direction, "relationship_kinds": kinds or ["calls"]},
         }
         if continuation is not None:
             request["continuation"] = continuation
