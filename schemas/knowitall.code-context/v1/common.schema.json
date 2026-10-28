@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "knowitall.code-context/v1/common.schema.json",
+  "$defs": {
+    "identity": {"type": "string", "minLength": 1},
+    "digest": {"type": "string", "pattern": "^(sha1:[0-9a-f]{40}|sha256:[0-9a-f]{64})$"},
+    "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(/|$))[^/]+(?:/[^/]+)*$"},
+    "position": {
+      "type": "object", "additionalProperties": false,
+      "required": ["line", "column"],
+      "properties": {"line": {"type": "integer", "minimum": 1}, "column": {"type": "integer", "minimum": 1}}
+    }
+  }
+}

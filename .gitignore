@@ -7,4 +7,5 @@ data/
 repositories/
 graphify-out/
 __pycache__/
+pytest-of-*/
 .venv/

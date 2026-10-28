@@ -1,0 +1,6 @@
+{
+  "contract": "knowitall.code-context/v1", "request_id": "req-partial", "project_id": "project-synthetic", "repository_id": "repo-python-service",
+  "resolved": {"snapshot_id": "snap-python-0002", "commit": "sha1:2222222222222222222222222222222222222222", "content_manifest_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "generation_id": "gen-python-0002", "artifact_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},
+  "status": "partial", "coverage": {"inventory": "complete", "extraction": "partial", "relevant_scope": "partial", "limitations": ["parser failed"]},
+  "evidence": [], "ambiguities": [], "missing_evidence": [{"kind": "parser", "scope": "src/bad.py", "reason": "syntax_error"}], "truncated": false, "continuation": null
+}
