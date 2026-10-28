@@ -1,0 +1,14 @@
+{
+  "contract": "knowitall.code-context/v1",
+  "project": {"project_id": "project-synthetic", "project_name": "Synthetic conformance project"},
+  "repository": {"repository_id": "repo-python-service", "repository_name": "Python service", "origin": "fixture://python-service"},
+  "source": {
+    "snapshot_id": "snap-python-0001", "vcs": "git", "commit": "sha1:1111111111111111111111111111111111111111",
+    "content_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "cleanliness": "clean", "dirty": null,
+    "submodules": {"policy": "exclude", "entries": []}, "lfs": {"policy": "pointers", "objects_resolved": false}
+  },
+  "scope": {"inventory_complete": true, "included": [{"path": "src/orders.py", "content_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "status": "extracted"}], "excluded": [], "failed": []},
+  "extraction": {"engine": "graphify", "engine_version": "0.9.96", "engine_source_revision": "sha1:dac063456bc1f5d92354ec3936fd9dd1513a83f3", "runtime": {"name": "python", "version": "3.12.7"}, "config_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "model_enrichment": "disabled"},
+  "graph": {"generation_id": "gen-python-0001", "artifact_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "schema_version": "example-graph-schema/v1", "state": "complete"},
+  "coverage": {"inventory": "complete", "extraction": "complete", "languages": [{"language": "python", "files_discovered": 1, "files_extracted": 1, "files_failed": 0}], "limitations": []}
+}
