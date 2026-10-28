@@ -38,6 +38,33 @@ def test_explicit_dirty_policy_binds_included_working_bytes(make_repo, tmp_path)
     assert dirty.snapshot_id != create_snapshot(repo, "project", "repo", tmp_path / "other", SnapshotPolicy(dirty="admit")).snapshot_id
 
 
+def test_admitted_deleted_file_is_absent_from_snapshot(make_repo, tmp_path):
+    repo = make_repo()
+    (repo / "src" / "store.py").unlink()
+
+    snapshot = create_snapshot(
+        repo, "project", "repo", tmp_path / "out",
+        SnapshotPolicy(dirty="admit", tracked_changes="include"),
+    )
+
+    assert "src/store.py" not in {entry.path for entry in snapshot.included}
+    assert not (tmp_path / "out" / snapshot.snapshot_id / "source" / "src" / "store.py").exists()
+
+
+def test_admitted_rename_removes_old_path_and_captures_new_path(make_repo, tmp_path):
+    repo = make_repo()
+    (repo / "src" / "store.py").rename(repo / "src" / "persistence.py")
+
+    snapshot = create_snapshot(
+        repo, "project", "repo", tmp_path / "out",
+        SnapshotPolicy(dirty="admit", tracked_changes="include", untracked_files="include"),
+    )
+
+    paths = {entry.path for entry in snapshot.included}
+    assert "src/store.py" not in paths
+    assert "src/persistence.py" in paths
+
+
 def test_dirty_policy_records_excluded_working_changes(make_repo, tmp_path):
     repo = make_repo()
     (repo / "src" / "orders.py").write_text("changed = True\n", encoding="utf-8")
