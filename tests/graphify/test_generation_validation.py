@@ -75,6 +75,16 @@ def test_rejects_unaccounted_source_file(snapshot):
         normalize(snapshot, raw)
 
 
+def test_incomplete_inventory_makes_generation_partial(snapshot):
+    incomplete = replace(snapshot, inventory_complete=False, failed=({"path": ".", "reason": "listing_failed"},))
+    generation = normalize(incomplete, valid_raw(incomplete))
+
+    assert generation.state == "partial"
+    assert generation.coverage.inventory == "partial"
+    assert generation.coverage.relevant_scope == "partial"
+    assert "listing_failed" in generation.coverage.limitations
+
+
 def test_parser_failure_makes_generation_partial(snapshot):
     raw = valid_raw(snapshot)
     failed = raw["processed_files"].pop()
