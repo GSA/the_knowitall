@@ -1,0 +1,3 @@
+# Verified PyPI artifact for the optional real-engine acceptance environment.
+graphifyy==0.9.96 \
+    --hash=sha256:bbef4c79b5905f45e384a7ca49417cd6c131d4774f280037159dd6cf4c425e29
