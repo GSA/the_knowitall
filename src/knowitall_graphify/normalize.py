@@ -139,10 +139,14 @@ def normalize_generation(snapshot: SnapshotManifest, raw_artifact: bytes, *, exp
         if value.get("path") not in admitted:
             raise GenerationValidationError("edge has missing or invalid source locator")
         edges.append(GraphEdge(value["id"], value["source"], value["target"], value["kind"], value["path"], _range(value, "edge"), admitted[value["path"]]))
-    state = "partial" if failed else "complete"
-    coverage = Coverage("complete" if snapshot.inventory_complete else "partial", state, state, tuple(sorted(set(failed.values()))))
+    extraction = "partial" if failed else "complete"
+    state = "complete" if snapshot.inventory_complete and extraction == "complete" else "partial"
+    limitations = set(failed.values())
+    limitations.update(item.get("reason", "inventory_failure") for item in snapshot.failed)
+    coverage = Coverage("complete" if snapshot.inventory_complete else "partial", extraction, state, tuple(sorted(limitations)))
     snapshot_ref = SnapshotRef(snapshot.project_id, snapshot.repository_id, snapshot.snapshot_id, snapshot.commit, snapshot.content_manifest_digest)
-    generation_id = "gen-" + hashlib.sha256((snapshot.snapshot_id + digest + "graphifyy:0.9.96").encode()).hexdigest()
+    identity = "\0".join((snapshot.snapshot_id, digest, ENGINE_IDENTITY, RUNTIME_IDENTITY, CONFIG_IDENTITY))
+    generation_id = "gen-" + hashlib.sha256(identity.encode()).hexdigest()
     return GraphGeneration(snapshot_ref, generation_id, digest, state, coverage, tuple(sorted(nodes, key=lambda item: item.symbol_id)), tuple(sorted(edges, key=lambda item: item.evidence_id)), tuple(sorted(failed.items())), raw_artifact)
 
 
