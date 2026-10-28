@@ -8,3 +8,7 @@ repositories/
 graphify-out/
 __pycache__/
 .venv/
+/.roborev.toml
+/.roborev/
+/.superpowers/
+
