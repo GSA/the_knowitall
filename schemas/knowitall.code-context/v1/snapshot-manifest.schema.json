@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "knowitall.code-context/v1/snapshot-manifest.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["contract", "project", "repository", "source", "scope", "extraction", "graph", "coverage"],
+  "properties": {
+    "contract": {"const": "knowitall.code-context/v1"},
+    "project": {"$ref": "#/$defs/namedProject"}, "repository": {"$ref": "#/$defs/namedRepository"},
+    "source": {"$ref": "#/$defs/source"}, "scope": {"$ref": "#/$defs/scope"},
+    "extraction": {"$ref": "#/$defs/extraction"}, "graph": {"$ref": "#/$defs/graph"}, "coverage": {"$ref": "#/$defs/coverage"}
+  },
+  "$defs": {
+    "identity": {"type": "string", "minLength": 1},
+    "digest": {"type": "string", "pattern": "^(sha1:[0-9a-f]{40}|sha256:[0-9a-f]{64})$"},
+    "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(/|$))[^/]+(?:/[^/]+)*$"},
+    "namedProject": {"type": "object", "additionalProperties": false, "required": ["project_id", "project_name"], "properties": {"project_id": {"$ref": "#/$defs/identity"}, "project_name": {"$ref": "#/$defs/identity"}}},
+    "namedRepository": {"type": "object", "additionalProperties": false, "required": ["repository_id", "repository_name"], "properties": {"repository_id": {"$ref": "#/$defs/identity"}, "repository_name": {"$ref": "#/$defs/identity"}, "origin": {"type": "string", "minLength": 1}}},
+    "source": {"type": "object", "additionalProperties": false, "required": ["snapshot_id", "vcs", "commit", "content_manifest_digest", "cleanliness", "dirty", "submodules", "lfs"], "properties": {"snapshot_id": {"$ref": "#/$defs/identity"}, "vcs": {"const": "git"}, "commit": {"$ref": "#/$defs/digest"}, "content_manifest_digest": {"$ref": "#/$defs/digest"}, "cleanliness": {"enum": ["clean", "dirty"]}, "dirty": {"type": ["object", "null"]}, "submodules": {"type": "object"}, "lfs": {"type": "object"}}},
+    "included": {"type": "object", "additionalProperties": false, "required": ["path", "content_digest", "status"], "properties": {"path": {"$ref": "#/$defs/path"}, "content_digest": {"$ref": "#/$defs/digest"}, "status": {"enum": ["inventoried", "extracted", "failed"]}}},
+    "otherScope": {"type": "object", "additionalProperties": false, "required": ["path", "reason"], "properties": {"path": {"$ref": "#/$defs/path"}, "reason": {"type": "string", "minLength": 1}}},
+    "scope": {"type": "object", "additionalProperties": false, "required": ["inventory_complete", "included", "excluded", "failed"], "properties": {"inventory_complete": {"type": "boolean"}, "included": {"type": "array", "items": {"$ref": "#/$defs/included"}}, "excluded": {"type": "array", "items": {"$ref": "#/$defs/otherScope"}}, "failed": {"type": "array", "items": {"$ref": "#/$defs/otherScope"}}}},
+    "extraction": {"type": "object", "additionalProperties": false, "required": ["engine", "engine_version", "engine_source_revision", "runtime", "config_digest", "model_enrichment"], "properties": {"engine": {"type": "string", "minLength": 1}, "engine_version": {"type": "string", "minLength": 1}, "engine_source_revision": {"$ref": "#/$defs/digest"}, "runtime": {"type": "object"}, "config_digest": {"$ref": "#/$defs/digest"}, "model_enrichment": {"const": "disabled"}}},
+    "graph": {"type": "object", "additionalProperties": false, "required": ["generation_id", "artifact_digest", "schema_version", "state"], "properties": {"generation_id": {"$ref": "#/$defs/identity"}, "artifact_digest": {"$ref": "#/$defs/digest"}, "schema_version": {"type": "string", "minLength": 1}, "state": {"enum": ["complete", "partial"]}}},
+    "coverage": {"type": "object", "additionalProperties": false, "required": ["inventory", "extraction", "languages", "limitations"], "properties": {"inventory": {"enum": ["complete", "partial", "unknown"]}, "extraction": {"enum": ["complete", "partial", "unknown"]}, "languages": {"type": "array", "items": {"type": "object"}}, "limitations": {"type": "array", "items": {"type": "string"}}}}
+  }
+}

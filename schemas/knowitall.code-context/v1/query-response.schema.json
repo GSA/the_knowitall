@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "knowitall.code-context/v1/query-response.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["contract", "request_id", "project_id", "repository_id", "resolved", "status", "coverage", "evidence", "ambiguities", "missing_evidence", "truncated", "continuation"],
+  "properties": {
+    "contract": {"const": "knowitall.code-context/v1"}, "request_id": {"$ref": "#/$defs/identity"}, "project_id": {"$ref": "#/$defs/identity"}, "repository_id": {"$ref": "#/$defs/identity"},
+    "resolved": {"type": ["object", "null"], "additionalProperties": false, "required": ["snapshot_id", "commit", "content_manifest_digest", "generation_id", "artifact_digest"], "properties": {"snapshot_id": {"$ref": "#/$defs/identity"}, "commit": {"$ref": "#/$defs/digest"}, "content_manifest_digest": {"$ref": "#/$defs/digest"}, "generation_id": {"$ref": "#/$defs/identity"}, "artifact_digest": {"$ref": "#/$defs/digest"}}},
+    "status": {"enum": ["ok", "partial", "not_found", "ambiguous", "stale", "unavailable", "invalid_request"]},
+    "coverage": {"type": "object", "additionalProperties": false, "required": ["inventory", "extraction", "relevant_scope", "limitations"], "properties": {"inventory": {"enum": ["complete", "partial", "unknown"]}, "extraction": {"enum": ["complete", "partial", "unknown"]}, "relevant_scope": {"enum": ["complete", "partial", "unknown"]}, "limitations": {"type": "array", "items": {"type": "string"}}}},
+    "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}}, "ambiguities": {"type": "array", "items": {"type": "object"}},
+    "missing_evidence": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["kind", "scope", "reason"], "properties": {"kind": {"$ref": "#/$defs/identity"}, "scope": {"$ref": "#/$defs/identity"}, "reason": {"$ref": "#/$defs/identity"}}}},
+    "truncated": {"type": "boolean"}, "continuation": {"type": ["string", "null"], "minLength": 1}
+  },
+  "$defs": {
+    "identity": {"type": "string", "minLength": 1}, "digest": {"type": "string", "pattern": "^(sha1:[0-9a-f]{40}|sha256:[0-9a-f]{64})$"},
+    "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(/|$))[^/]+(?:/[^/]+)*$"},
+    "position": {"type": "object", "additionalProperties": false, "required": ["line", "column"], "properties": {"line": {"type": "integer", "minimum": 1}, "column": {"type": "integer", "minimum": 1}}},
+    "symbol": {"type": "object", "additionalProperties": false, "required": ["symbol_id", "name"], "properties": {"symbol_id": {"$ref": "#/$defs/identity"}, "name": {"$ref": "#/$defs/identity"}}},
+    "locator": {"type": "object", "additionalProperties": false, "required": ["path", "start", "end", "content_digest"], "properties": {"path": {"$ref": "#/$defs/path"}, "start": {"$ref": "#/$defs/position"}, "end": {"$ref": "#/$defs/position"}, "content_digest": {"$ref": "#/$defs/digest"}}},
+    "evidence": {"type": "object", "additionalProperties": false, "required": ["evidence_id", "grade", "kind", "subject", "object", "locator"], "properties": {"evidence_id": {"$ref": "#/$defs/identity"}, "grade": {"enum": ["deterministic_extraction", "recorded_artifact", "generated_narrative", "inference"]}, "kind": {"$ref": "#/$defs/identity"}, "subject": {"$ref": "#/$defs/symbol"}, "object": {"$ref": "#/$defs/symbol"}, "locator": {"$ref": "#/$defs/locator"}}}
+  }
+}
