@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "knowitall-code-context"
+version = "0.1.0"
+description = "Revision-bound code-context provider contracts and local implementation"
+requires-python = ">=3.12"
+dependencies = ["jsonschema>=4.19,<5"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<9", "build>=1.2,<2"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/knowitall_contract"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

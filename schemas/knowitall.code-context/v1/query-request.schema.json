@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "knowitall.code-context/v1/query-request.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["contract", "request_id", "project_id", "repository_id", "selector", "query"],
+  "properties": {
+    "contract": {"const": "knowitall.code-context/v1"},
+    "request_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "repository_id": {"type": "string", "minLength": 1},
+    "selector": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["mode", "snapshot_id", "generation_id", "freshness"], "properties": {"mode": {"const": "exact"}, "snapshot_id": {"type": "string", "minLength": 1}, "generation_id": {"type": "string", "minLength": 1}, "freshness": {"enum": ["allow_historical", "require_current"]}}},
+        {"type": "object", "additionalProperties": false, "required": ["mode"], "properties": {"mode": {"const": "current"}}}
+      ]
+    },
+    "query": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "symbol_id", "direction", "relationship_kinds"],
+      "properties": {
+        "kind": {"const": "dependencies"}, "symbol_id": {"type": "string", "minLength": 1},
+        "direction": {"enum": ["incoming", "outgoing"]},
+        "relationship_kinds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "continuation": {"type": "string", "minLength": 1}
+  }
+}
