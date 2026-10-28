@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +9,8 @@ from .models import SourceRange
 
 
 CONTRACT = "knowitall.code-context/v1"
-_SCHEMA_ROOT = Path(__file__).parents[2] / "schemas" / CONTRACT
+_PACKAGED_SCHEMA_ROOT = files("knowitall_contract").joinpath("schemas")
+_SOURCE_SCHEMA_ROOT = Path(__file__).parents[2] / "schemas" / CONTRACT
 
 
 class ContractValidationError(ValueError):
@@ -23,7 +25,9 @@ def _schema_error(error: Any) -> ContractValidationError:
 def _validate_schema(value: Mapping[str, object], filename: str) -> None:
     import json
 
-    schema = json.loads((_SCHEMA_ROOT / filename).read_text(encoding="utf-8"))
+    packaged = _PACKAGED_SCHEMA_ROOT.joinpath(filename)
+    schema_path = packaged if packaged.is_file() else _SOURCE_SCHEMA_ROOT / filename
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
     validator = Draft202012Validator(schema)
     errors = sorted(validator.iter_errors(value), key=lambda error: list(error.absolute_path))
     if errors:

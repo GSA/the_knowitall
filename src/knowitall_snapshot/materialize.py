@@ -49,9 +49,16 @@ def _identity(*parts: str) -> str:
 def _status(repo: Path) -> tuple[set[str], set[str]]:
     tracked: set[str] = set()
     untracked: set[str] = set()
-    for record in filter(None, status_entries(repo).split(b"\0")):
+    records = iter(status_entries(repo).split(b"\0"))
+    for record in records:
+        if not record:
+            continue
         code = record[:2]
         path = record[3:].decode("utf-8", "strict")
+        if b"R" in code or b"C" in code:
+            original = next(records).decode("utf-8", "strict")
+            safe_path(original)
+            tracked.add(original)
         if code == b"??" and path.endswith("/"):
             path = path[:-1]
         safe_path(path)
@@ -68,6 +75,8 @@ def _dirty_inventory(repo: Path, included: tuple[InventoryEntry, ...], excluded:
             if target.is_file() and not target.is_symlink():
                 data = target.read_bytes()
                 entries[path] = InventoryEntry(path, "sha256:" + hashlib.sha256(data).hexdigest(), data)
+            else:
+                entries.pop(path, None)
         else:
             exclusions.append({"path": path, "reason": "dirty_tracked_excluded"})
     nested_roots: set[str] = set()
