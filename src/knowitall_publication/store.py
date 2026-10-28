@@ -220,6 +220,16 @@ class PublicationStore:
                         continue
         return tuple(sorted(recovered))
 
+    def resolve_exact(self, project_id: str, repository_id: str, snapshot_id: str, generation_id: str) -> GenerationRef:
+        try:
+            generation = _read_generation(self._generation_path(generation_id))
+        except OSError as error:
+            raise KeyError(generation_id) from error
+        snapshot = generation.snapshot
+        if (snapshot.project_id, snapshot.repository_id, snapshot.snapshot_id) != (project_id, repository_id, snapshot_id):
+            raise KeyError(generation_id)
+        return _generation_ref(generation)
+
     def resolve_current(self, project_id: str, repository_id: str) -> GenerationRef:
         try:
             value = json.loads(self._current_path(project_id, repository_id).read_bytes())
