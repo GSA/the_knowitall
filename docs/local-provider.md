@@ -34,6 +34,24 @@ not host, loader, or filesystem attestation, and it is not a production
 runtime-integrity claim; see
 [`graphify-dependency.md`](graphify-dependency.md).
 
+## Authorized repository intake
+
+The library accepts either an explicitly supplied local Git checkout through
+`create_snapshot(...)` or one explicitly configured remote through
+`acquire_remote(origin, destination)`. Remote acquisition clones without tags
+or submodules, or fetches and hard-resets an existing dedicated checkout to
+`origin/HEAD`; it never discovers repositories. Interactive prompting and Git
+credential helpers are disabled, and origins containing embedded credentials
+are rejected. Callers provide stable project and repository IDs separately;
+checkout paths and origin URLs are provenance, not identity.
+
+Snapshot materialization reads committed blobs with hook-disabled Git, rejects
+dirty input by default, preserves regular-file executable modes, records
+symlink/submodule/LFS and inventory limitations, and publishes only by an atomic
+rename after the complete manifest and source tree exist. Real repository
+allowlists, credentials, retention, and storage locations require separate
+approval; the synthetic tests do not contact a network.
+
 ## Offline verification
 
 From the repository root, with isolated dependencies available on `PYTHONPATH`:
@@ -65,6 +83,20 @@ Graphify can conservatively mark files without deterministic AST records as
 partial. A partial result is successful evidence with explicit limitations, not
 complete repository coverage. Extracted calls/imports are static evidence, not
 proof of runtime behavior or business meaning.
+
+## Local query transport
+
+`QueryService` is the in-process API. `serve_stdio(service, input, output)` adds
+a minimal local newline-delimited JSON boundary for Engineer or another local
+consumer: each input line is one v1 request and produces exactly one compact v1
+response line. Malformed JSON or a non-object request produces an explicit
+`invalid_request` packet and does not terminate the stream. The service resolves
+only atomically published generations, echoes immutable identities, and exposes
+partial, stale, ambiguous, unavailable, and paginated results unchanged.
+
+This adapter is not an MCP server, authenticated network endpoint, generic
+provider framework, or deployment service. A future transport may wrap the same
+v1 request/response API without changing evidence semantics.
 
 ## Temporary state and cleanup
 
