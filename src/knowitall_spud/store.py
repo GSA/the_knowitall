@@ -83,6 +83,23 @@ def _canonical(value: object) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
+def _durable_directory(path: Path) -> None:
+    """Create a private directory and persist its entry in its parent.
+
+    An existing directory may be a `mkdir` left by an interrupted
+    initialization, so its parent entry is persisted on reopening as well as on
+    first creation. Creation tolerates a concurrent creator and then verifies
+    that the result is a real directory.
+    """
+    if not path.exists():
+        _durable_directory(path.parent)
+    path.mkdir(mode=_DIRECTORY_MODE, exist_ok=True)
+    if path.is_symlink() or not path.is_dir():
+        raise AdmissionValidationError(f"store path {path.name!r} is not a directory")
+    # A directory entry is durable only once its parent is persisted.
+    _fsync_directory(path.parent)
+
+
 def _fsync_directory(path: Path) -> None:
     descriptor = os.open(path, os.O_RDONLY)
     try:
@@ -183,25 +200,15 @@ def _receipt(bundle: NormalizedBundle) -> AdmissionReceipt:
 class AdmissionStore:
     def __init__(self, root: Path):
         self.root = Path(root)
-        missing = [path for path in (self.root, *self.root.parents) if not path.exists()]
-        for path in reversed(missing) if missing else ():
-            path.mkdir(mode=_DIRECTORY_MODE)
-            # A directory entry is durable only once its parent is persisted.
-            _fsync_directory(path.parent)
-        for name in ("bundles", "index"):
-            child = self.root / name
-            if not child.exists():
-                child.mkdir(mode=_DIRECTORY_MODE)
-                _fsync_directory(self.root)
         for path in (self.root, self.root / "bundles", self.root / "index"):
+            _durable_directory(path)
             if stat.S_IMODE(path.stat().st_mode) != _DIRECTORY_MODE:
                 path.chmod(_DIRECTORY_MODE)
+        # The lock file itself carries no evidence; it only has to exist before
+        # any admission or recovery can contend for the store.
         lock = self.root / ".lock"
-        if not lock.exists():
-            # The lock file itself carries no evidence; it only has to exist
-            # before any admission or recovery can contend for the store.
-            os.close(os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_CLOEXEC, _FILE_MODE))
-            _fsync_directory(self.root)
+        os.close(os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_CLOEXEC, _FILE_MODE))
+        _fsync_directory(self.root)
         if stat.S_IMODE(lock.stat().st_mode) != _FILE_MODE:
             lock.chmod(_FILE_MODE)
 
@@ -283,10 +290,8 @@ class AdmissionStore:
 
     def _publish_pointer(self, bundle: NormalizedBundle) -> None:
         index = self._index_path(bundle.project_id, bundle.repository_id)
-        if not index.exists():
-            index.mkdir(mode=_DIRECTORY_MODE)
-            # Persist the new index directory entry before anything points into it.
-            _fsync_directory(self.root / "index")
+        # Persist the index directory entry before anything points into it.
+        _durable_directory(index)
         pointer = self._pointer_path(bundle.project_id, bundle.repository_id, bundle.bundle_id)
         payload = _canonical(
             {
