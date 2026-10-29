@@ -119,6 +119,11 @@ unless a verified binding supplies `complete` or `partial`.
 | `skipped_uploads` | A retained manifest reports skipped files |
 | `unverified_source_binding`, `missing_bound_graph`, `unbound_graph_source_files`, `unbound_commit_evidence` | A supplied binding could not be verified against retained evidence |
 
+Graph identities, labels, relations, citation labels and declared limitation
+scopes must carry non-whitespace content: unusable retained fields keep their
+bytes and surface an `invalid_graph_records` or `invalid_citation_records`
+limitation, and an unusable descriptor scope is a `DescriptorError`.
+
 Limitations are never repaired by inference. They appear in the receipt, in
 `admission.limitations`, and as machine-readable `missing_evidence` entries
 classified as `artifact`, `binding`, `coverage` or `provenance`. Declared

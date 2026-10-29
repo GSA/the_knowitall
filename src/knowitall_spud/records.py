@@ -137,9 +137,14 @@ def _source_lines(value: object) -> tuple[int | None, int | None]:
     return start, end
 
 
+def _usable(*values: object) -> bool:
+    """A usable contract identity is a string with non-whitespace content."""
+    return all(isinstance(item, str) and item.strip() for item in values)
+
+
 def _source_reference(value: Mapping[str, object]) -> SourceReference | None:
     path = value.get("source_file")
-    if not isinstance(path, str) or not path:
+    if not _usable(path):
         return None
     start, end = _source_lines(value.get("source_location"))
     return SourceReference(path, start, end)
@@ -282,7 +287,7 @@ def _graph_records(artifact: RetainedArtifact) -> tuple[tuple[ArtifactRecord, ..
         identity = value.get("id")
         label = value.get("label")
         source_file = value.get("source_file")
-        if not all(isinstance(item, str) and item for item in (identity, label, source_file)):
+        if not _usable(identity, label, source_file):
             return (), ((artifact.path, "invalid_graph_records"),)
         if identity in identities:
             return (), ((artifact.path, "invalid_graph_records"),)
@@ -307,7 +312,7 @@ def _graph_records(artifact: RetainedArtifact) -> tuple[tuple[ArtifactRecord, ..
         subject = value.get("source")
         target = value.get("target")
         relation = value.get("relation")
-        if not all(isinstance(item, str) and item for item in (subject, target, relation)):
+        if not _usable(subject, target, relation):
             return (), ((artifact.path, "invalid_graph_records"),)
         if subject not in identities or target not in identities:
             return (), ((artifact.path, "invalid_graph_records"),)
@@ -342,7 +347,7 @@ def _citation_records(artifact: RetainedArtifact) -> tuple[tuple[ArtifactRecord,
         if not isinstance(value, Mapping):
             return (), ((artifact.path, "unsupported_citation_profile"),)
         label = value.get("label")
-        if not isinstance(label, str) or not label:
+        if not _usable(label):
             return (), ((artifact.path, "invalid_citation_records"),)
         locator = Locator(artifact.path, artifact.content_digest, pointer=f"/{position}")
         records.append(

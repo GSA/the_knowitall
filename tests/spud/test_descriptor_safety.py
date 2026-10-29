@@ -247,3 +247,12 @@ def test_source_binding_is_copied_defensively(make_bundle):
     nested["files"].append("src/injected.py")
 
     assert descriptor.source_binding == {"commit_sha": "1" * 40, "evidence": {"files": ["src/orders.py"]}}
+
+
+@pytest.mark.parametrize("entry", [{"scope": "   ", "reason": "missing_article"}, ("\t", "missing_archive")])
+def test_declared_missing_rejects_blank_scopes(make_bundle, entry):
+    _bundle_root, value = make_bundle()
+    value["declared_missing"] = [entry]
+
+    with pytest.raises(DescriptorError, match="nonempty strings"):
+        load_descriptor(value)
