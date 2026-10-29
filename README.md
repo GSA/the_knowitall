@@ -2,9 +2,9 @@
 
 Code context and revision-bound repository knowledge graphs for engineering.
 
-**Status: design/bootstrap, October 27, 2026.** Public repository:
+**Status: contract defined with a local synthetic slice, October 28, 2026.** Public repository:
 https://github.com/GSA/the_knowitall, tracked locally under Kata project
-`knowitall` (`.kata.toml`).
+`the_knowitall` (`.kata.toml`).
 
 ## Product boundaries
 
@@ -108,4 +108,28 @@ Connected Librarian and Engineer slices (`engi-platform#pyzt`):
 
 Target end-to-end demonstration (`engi-platform#hk33`):
 `source passage -> business rule/entity -> evidence-linked code symbol -> affected dependency -> Engineer change/review`, including interrupted-run recovery and source-update reassessment in isolated temporary fixture stores.
+
+## Provider Contract (`knowitall.code-context/v1`)
+
+`knowitall.code-context/v1` defines the engine-neutral provider/consumer boundary:
+
+| Path | Contents |
+| --- | --- |
+| `schemas/knowitall.code-context/v1/` | JSON Schemas for the snapshot manifest, query request, query response, and shared definitions |
+| `examples/knowitall.code-context/v1/` | Schema-valid manifest, exact request, success response, and partial response |
+| `src/knowitall_contract/` | Typed records and validation APIs loaded via `importlib.resources` |
+
+Every response binds project, repository, snapshot, commit (or admitted dirty-content) identity, graph generation, and raw-artifact digest (`current` is accepted only as a request selector). Queries support `symbol`, `dependencies`, `path`, and `source_range` with explicit status (`ok`, `partial`, `not_found`, `ambiguous`, `stale`, `unavailable`, `invalid_request`), machine-readable missing-evidence records, and cursor-based continuations.
+
+## Local Provider Usage
+
+Extraction uses `graphifyy==0.9.96` pinned by hash (see [`docs/graphify-dependency.md`](docs/graphify-dependency.md) and [`docs/local-provider.md`](docs/local-provider.md)).
+
+```sh
+export PYTHONPATH="/absolute/path/to/test-dependencies:$PWD/src"
+export KNOWITALL_GRAPHIFY_RUNTIME="/absolute/path/to/pinned-graphify-venv"
+python3 scripts/check-contract-examples.py
+python3 -m pytest -q
+```
+
 
