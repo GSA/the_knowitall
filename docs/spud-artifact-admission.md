@@ -83,7 +83,7 @@ Grades record *how* evidence was produced and are never promoted.
 | `recorded_artifact` | `graph_symbol`, `graph_relationship` | Graphify graph nodes and edges, with the producer's own `_origin`/`confidence` attribution |
 | `recorded_citation` | `citation_entry` | SPUD's flat citation index; `relation` is always `null`, so a citation never becomes a relationship |
 | `generated_narrative` | `narrative_passage` | Graph report and article text, inert, with half-open `[start_line, end_line)` locators |
-| `retained_provenance` | `provenance_assertion` | OKF and run-manifest fields, retained as asserted, not verified |
+| `retained_provenance` | `provenance_assertion` | OKF and run-manifest fields, retained as asserted, not verified, with half-open `[start_line, end_line)` locators |
 
 Every record carries a `locator` naming the artifact path, its content digest
 and either a JSON pointer or a line range, so any answer can be traced back to
@@ -127,7 +127,9 @@ miss as absence.
 
 `AdmissionStore` persists bytes, metadata and a recomputed receipt under a
 hash-derived private directory tree (`0o700`), publishing each bundle with a
-single atomic rename. An exact retry of the same bundle returns the same
+single atomic rename. The receipt digest covers the complete normalized
+metadata, including record payloads, artifact roles and supplied provenance, so
+an edit to retained metadata fails read-back verification. An exact retry of the same bundle returns the same
 receipt; changed bytes, changed metadata or an added companion raises
 `AdmissionConflict` and requires a new `bundle_id`. An interrupted admission is
 never queryable, and a corrupted artifact raises `AdmissionValidationError` with

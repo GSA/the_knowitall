@@ -20,6 +20,7 @@ from .records import (
     SourceReference,
     normalize_bundle,
     read_flat_yaml,
+    read_flat_yaml_spans,
 )
 from .query import (
     ARTIFACT_CONTRACT,
@@ -65,6 +66,7 @@ __all__ = [
     "normalize_bundle",
     "read_bundle",
     "read_flat_yaml",
+    "read_flat_yaml_spans",
     "resolve_artifacts",
     "safe_relative_path",
     "validate_artifact_request",

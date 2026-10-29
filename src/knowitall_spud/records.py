@@ -156,22 +156,24 @@ def _attribution(value: Mapping[str, object], keys: Iterable[str]) -> dict[str, 
     return attribution
 
 
-def read_flat_yaml(data: bytes) -> dict[str, str]:
-    """Read only `key: scalar` lines and `key:` blocks of scalars from YAML bytes.
+def read_flat_yaml_spans(data: bytes) -> dict[str, tuple[str, int, int]]:
+    """Read flat YAML fields with the half-open source line range of each field.
 
-    Nested mappings, inline collections, anchors, and documents that are not
-    flat scalars are ignored rather than guessed at. No YAML tag, alias, or
-    object construction is honored.
+    Only `key: scalar` lines and `key:` blocks of scalars are read. Nested
+    mappings, inline collections, anchors, and documents that are not flat
+    scalars are ignored rather than guessed at. No YAML tag, alias, or object
+    construction is honored.
     """
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
         return {}
     lines = text.split("\n")
-    fields: dict[str, str] = {}
+    fields: dict[str, tuple[str, int, int]] = {}
     index = 0
     while index < len(lines):
         raw = lines[index]
+        start_line = index + 1
         index += 1
         line = raw.split("#", 1)[0].rstrip() if not raw.lstrip().startswith("#") else ""
         if not line.strip() or line != line.lstrip() or line.startswith("-"):
@@ -184,7 +186,7 @@ def read_flat_yaml(data: bytes) -> dict[str, str]:
         if value:
             if value[0] in "{[&*!|>":
                 continue
-            fields[key] = value.strip("'\"")
+            fields[key] = (value.strip("'\""), start_line, start_line + 1)
             continue
         block: list[str] = []
         scalars = True
@@ -202,8 +204,13 @@ def read_flat_yaml(data: bytes) -> dict[str, str]:
             else:
                 scalars = False
         if scalars and block:
-            fields[key] = ", ".join(block)
+            fields[key] = (", ".join(block), start_line, index + 1)
     return fields
+
+
+def read_flat_yaml(data: bytes) -> dict[str, str]:
+    """Read flat YAML fields without their source line ranges."""
+    return {key: value for key, (value, _start, _end) in read_flat_yaml_spans(data).items()}
 
 
 def _graph_records(artifact: RetainedArtifact) -> tuple[tuple[ArtifactRecord, ...], tuple[tuple[str, str], ...]]:
@@ -351,12 +358,15 @@ def _narrative_records(artifact: RetainedArtifact) -> tuple[tuple[ArtifactRecord
 
 
 def _manifest_records(artifact: RetainedArtifact) -> tuple[tuple[ArtifactRecord, ...], tuple[tuple[str, str], ...]]:
-    fields = read_flat_yaml(artifact.data)
+    fields = read_flat_yaml_spans(artifact.data)
     if not fields:
         return (), ((artifact.path, "unreadable_manifest_fields"),)
     records = []
     for key in sorted(fields):
-        locator = Locator(artifact.path, artifact.content_digest, pointer=None)
+        value, start_line, end_line = fields[key]
+        locator = Locator(
+            artifact.path, artifact.content_digest, pointer=None, start_line=start_line, end_line=end_line
+        )
         records.append(
             ArtifactRecord(
                 record_id=_record_id(KIND_ASSERTION, locator, (key,)),
@@ -366,7 +376,7 @@ def _manifest_records(artifact: RetainedArtifact) -> tuple[tuple[ArtifactRecord,
                 subject=None,
                 object=None,
                 relation=None,
-                text=fields[key],
+                text=value,
                 source_reference=None,
                 locator=locator,
                 attribution={"role": artifact.role},
@@ -400,7 +410,9 @@ def _verify_binding(
     commit = binding.get("commit_sha")
     manifest_digest = binding.get("content_manifest_digest")
     manifest_path = binding.get("content_manifest_path")
-    if not all(isinstance(item, str) and item for item in (snapshot_id, commit, manifest_path)):
+    if not all(isinstance(item, str) and item.strip() for item in (snapshot_id, commit, manifest_path)):
+        return None, "unverified_source_binding"
+    if commit.strip().casefold() in PLACEHOLDER_VALUES:
         return None, "unverified_source_binding"
     if not is_digest(manifest_digest):
         return None, "unverified_source_binding"

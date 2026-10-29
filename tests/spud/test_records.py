@@ -359,3 +359,31 @@ def test_undecodable_narrative_and_unreadable_manifest_are_reported(make_bundle)
 
     assert (GRAPH_REPORT_PATH, "undecodable_narrative_text") in bundle.limitations
     assert (RUN_MANIFEST_PATH, "unreadable_manifest_fields") in bundle.limitations
+
+
+@pytest.mark.parametrize("commit", ["unknown", "   ", "tbd"])
+def test_binding_with_a_placeholder_commit_is_never_bound(make_bundle, commit):
+    bundle = bound_bundle(make_bundle, binding_extra={"commit_sha": commit})
+
+    assert bundle.revision_binding != "bound"
+    assert bundle.bound_snapshot is None
+    assert (GRAPH_PATH, "unverified_source_binding") in bundle.limitations
+
+
+def test_provenance_assertions_locate_their_manifest_lines(make_bundle):
+    bundle_root, value = make_bundle()
+    bundle = normalize(bundle_root, value)
+    manifest = next(item for item in bundle.artifacts if item.path == RUN_MANIFEST_PATH)
+    lines = manifest.data.decode("utf-8").split("\n")
+
+    assertions = [
+        record
+        for record in bundle.records
+        if record.kind == "provenance_assertion" and record.locator.artifact_path == RUN_MANIFEST_PATH
+    ]
+    assert assertions
+
+    for record in assertions:
+        start, end = record.locator.start_line, record.locator.end_line
+        assert start is not None and end is not None and end > start
+        assert any(line.strip().startswith(f"{record.name}:") for line in lines[start - 1 : end - 1])
