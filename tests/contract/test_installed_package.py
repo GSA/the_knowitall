@@ -14,6 +14,7 @@ def test_built_wheel_contains_loadable_contract_schemas(tmp_path):
 import json
 from importlib.resources import files
 from knowitall_contract import validate_manifest, validate_query_request, validate_query_response
+from knowitall_updates import UpdateLedger
 examples = files('knowitall_contract').joinpath('examples')
 validate_manifest(json.loads(examples.joinpath('clean-manifest.json').read_text()))
 validate_query_request(json.loads(examples.joinpath('exact-dependency-request.json').read_text()))

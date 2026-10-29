@@ -13,10 +13,10 @@ dependencies = ["jsonschema>=4.19,<5"]
 test = ["pytest>=8,<9", "build>=1.2,<2"]
 
 [tool.hatch.build.targets.sdist]
-exclude = [".superpowers", "pytest-of-*"]
+exclude = [".superpowers", ".local", "pytest-of-*"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/knowitall_contract", "src/knowitall_snapshot", "src/knowitall_graphify", "src/knowitall_publication", "src/knowitall_query", "src/knowitall_spud"]
+packages = ["src/knowitall_contract", "src/knowitall_snapshot", "src/knowitall_graphify", "src/knowitall_publication", "src/knowitall_query", "src/knowitall_updates", "src/knowitall_spud"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "schemas/knowitall.code-context/v1" = "knowitall_contract/schemas"

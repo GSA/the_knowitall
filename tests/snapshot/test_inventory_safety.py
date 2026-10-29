@@ -9,7 +9,7 @@ from knowitall_snapshot.inventory import safe_path
 from conftest import git
 
 
-@pytest.mark.parametrize("path", ["/absolute.py", "src/../escape.py", "src//empty.py"])
+@pytest.mark.parametrize("path", ["/absolute.py", "src/../escape.py", "src//empty.py", ".git/config", "src/.git/config"])
 def test_unsafe_inventory_paths_are_rejected(path):
     with pytest.raises(ValueError, match="unsafe repository path"):
         safe_path(path)
@@ -71,7 +71,7 @@ def test_inventory_failure_does_not_return_a_deletion_authority(make_repo, tmp_p
     repo = make_repo()
     import knowitall_snapshot.materialize as materialize
 
-    monkeypatch.setattr(materialize, "clean_inventory", lambda _repo: (_ for _ in ()).throw(GitError("listing failed")))
+    monkeypatch.setattr(materialize, "clean_inventory", lambda *_args: (_ for _ in ()).throw(GitError("listing failed")))
 
     snapshot = create_snapshot(repo, "project", "repo", tmp_path / "out", SnapshotPolicy(inventory_errors="record"))
 
