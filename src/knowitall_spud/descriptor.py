@@ -9,6 +9,7 @@ bundle layouts.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -116,7 +117,10 @@ def _identity(value: Mapping[str, object], key: str) -> str:
     raw = value.get(key)
     if not isinstance(raw, str) or not raw.strip():
         raise DescriptorError(f"descriptor {key} must be a nonempty string")
-    return raw
+    stripped = raw.strip()
+    if any(character < " " or character == "\x7f" for character in stripped):
+        raise DescriptorError(f"descriptor {key} must not contain control characters")
+    return stripped
 
 
 def _string_map(value: Mapping[str, object], key: str) -> dict[str, str]:
@@ -164,6 +168,9 @@ def _selection(value: Mapping[str, object]) -> tuple[SelectedArtifact, ...]:
     selected: list[SelectedArtifact] = []
     for entry in raw:
         if isinstance(entry, Mapping):
+            unexpected = sorted(repr(key) for key in set(entry) - {"role", "path"})
+            if unexpected:
+                raise DescriptorError(f"descriptor artifact entry has unsupported keys: {unexpected}")
             role, path = entry.get("role"), entry.get("path")
         elif isinstance(entry, (list, tuple)) and len(entry) == 2:
             role, path = entry
@@ -177,6 +184,8 @@ def _selection(value: Mapping[str, object]) -> tuple[SelectedArtifact, ...]:
             relative = safe_relative_path(path)
         except ArtifactError as error:
             raise DescriptorError(str(error)) from error
+        if any(item.path == relative for item in selected):
+            raise DescriptorError(f"descriptor selects {relative!r} more than once")
         selected.append(SelectedArtifact(role, relative))
     return tuple(selected)
 
@@ -184,7 +193,7 @@ def _selection(value: Mapping[str, object]) -> tuple[SelectedArtifact, ...]:
 def load_descriptor(value: Mapping[str, object]) -> AdmissionDescriptor:
     if not isinstance(value, Mapping):
         raise DescriptorError("descriptor must be a mapping")
-    unknown = sorted(set(value) - _DESCRIPTOR_KEYS)
+    unknown = sorted((repr(key) for key in set(value) - _DESCRIPTOR_KEYS))
     if unknown:
         raise DescriptorError(f"descriptor has unsupported keys: {unknown}")
     if value.get("descriptor_version") != DESCRIPTOR_VERSION:
@@ -220,7 +229,7 @@ def load_descriptor(value: Mapping[str, object]) -> AdmissionDescriptor:
         supplied=_string_map(value, "supplied"),
         expected_digests=expected_digests,
         declared_missing=_pairs(value, "declared_missing", reasons=LIMITATION_REASONS),
-        source_binding=dict(source_binding) if source_binding is not None else None,
+        source_binding=deepcopy(dict(source_binding)) if source_binding is not None else None,
     )
 
 

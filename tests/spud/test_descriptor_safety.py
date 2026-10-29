@@ -14,6 +14,8 @@ from knowitall_spud.descriptor import (
     resolve_artifacts,
 )
 
+from conftest import GRAPH_PATH
+
 
 
 def test_load_descriptor_rejects_unknown_version(make_bundle):
@@ -196,3 +198,52 @@ def test_resolve_artifacts_skips_symlinked_article_files(make_bundle):
     assert [item.path for item in selected if item.role == "article"] == [
         "spud-out/markdown/analysis/structural-analysis.md"
     ]
+
+
+@pytest.mark.parametrize("identity", ["project_id", "repository_id", "bundle_id"])
+def test_load_descriptor_rejects_control_characters_in_identities(make_bundle, identity):
+    _root, value = make_bundle()
+    value[identity] = "bundle\x001"
+
+    with pytest.raises(DescriptorError, match="control characters"):
+        load_descriptor(value)
+
+
+def test_load_descriptor_strips_surrounding_whitespace_from_identities(make_bundle):
+    _root, value = make_bundle()
+    value["bundle_id"] = "  bundle-1\t"
+
+    assert load_descriptor(value).bundle_id == "bundle-1"
+
+
+def test_load_descriptor_reports_non_string_keys_as_descriptor_errors(make_bundle):
+    _root, value = make_bundle()
+    value[1] = "x"
+    value["zz"] = "y"
+
+    with pytest.raises(DescriptorError, match="unsupported keys"):
+        load_descriptor(value)
+
+
+def test_explicit_selection_rejects_duplicate_paths_and_unknown_entry_keys(make_bundle):
+    _root, value = make_bundle(layout="explicit")
+    duplicated = list(value["artifacts"]) + [dict(value["artifacts"][0])]
+    value["artifacts"] = duplicated
+
+    with pytest.raises(DescriptorError, match="selects .* more than once"):
+        load_descriptor(value)
+
+    value["artifacts"] = [{"role": "graph", "path": GRAPH_PATH, "note": "extra"}]
+    with pytest.raises(DescriptorError, match="unsupported keys"):
+        load_descriptor(value)
+
+
+def test_source_binding_is_copied_defensively(make_bundle):
+    _root, value = make_bundle()
+    nested = {"files": ["src/orders.py"]}
+    value["source_binding"] = {"commit_sha": "1" * 40, "evidence": nested}
+
+    descriptor = load_descriptor(value)
+    nested["files"].append("src/injected.py")
+
+    assert descriptor.source_binding == {"commit_sha": "1" * 40, "evidence": {"files": ["src/orders.py"]}}
