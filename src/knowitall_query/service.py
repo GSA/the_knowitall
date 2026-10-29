@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from dataclasses import asdict
 
 from knowitall_contract import ContractValidationError, validate_query_request, validate_query_response
-from knowitall_publication import PublicationStore
+from knowitall_publication import PublicationStore, PublicationValidationError
 
 from .continuation import InvalidContinuation, issue_token, read_token
 from .status import empty_response
@@ -148,7 +148,7 @@ class QueryService:
         try:
             reference, stale = self._reference(request)
             generation = self.store.open_generation(reference)
-        except KeyError:
+        except (KeyError, PublicationValidationError):
             return empty_response(request, "unavailable")
         resolved, coverage = _resolved(reference), _coverage(generation)
         if stale:

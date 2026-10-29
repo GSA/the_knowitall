@@ -11,6 +11,8 @@ def validate_for_publication(generation: GraphGeneration) -> None:
 
 
 def authoritative_deletions(previous: SnapshotManifest, current: SnapshotManifest, *, git_delta: Mapping[str, object] | None = None) -> set[str]:
+    if (previous.project_id, previous.repository_id) != (current.project_id, current.repository_id):
+        raise PublicationValidationError("deletion authority cannot cross repository identity")
     previous_paths = {entry.path for entry in previous.included}
     current_paths = {entry.path for entry in current.included}
     candidates = previous_paths - current_paths

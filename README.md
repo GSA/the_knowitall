@@ -133,3 +133,18 @@ python3 -m pytest -q
 ```
 
 
+## Resumable local updates
+
+`knowitall_updates.UpdateLedger` durably captures admitted snapshot bytes and
+request/runtime identities before acknowledgment. `UpdateRunner.submit` and
+`resume` use Graphify's pinned incremental engine and validated graph/manifest
+checkpoints, then publish only against the explicitly saved predecessor.
+`inspect` exposes progress and failure reasons; retrying a published request
+returns its original receipt without rolling newer `current` evidence backward.
+See [the local API and recovery example](docs/local-provider.md#resumable-updates).
+
+Operations are serialized on one local POSIX store; keep one ledger per store.
+Incomplete inventories block rather than delete unknown survivors. Valid partial
+graphs remain queryable with their actual revision and limitations. The private
+ledger retains source bytes and graph companions, so keep it outside Git and
+apply an explicit retention policy. No scheduler or network service is added.

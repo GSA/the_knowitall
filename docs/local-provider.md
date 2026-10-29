@@ -84,6 +84,77 @@ partial. A partial result is successful evidence with explicit limitations, not
 complete repository coverage. Extracted calls/imports are static evidence, not
 proof of runtime behavior or business meaning.
 
+## Resumable updates
+
+The library consumes an already admitted `SnapshotManifest`; it does not grant
+intake or execution authority. Example using an approved pinned runtime and a
+private state root:
+
+```python
+from pathlib import Path
+from knowitall_graphify import GraphifyConfig, executable_digest
+from knowitall_publication import PublicationStore
+from knowitall_updates import UpdateLedger, UpdateRunner
+
+private = Path("/absolute/private/knowitall-state")
+runtime = Path("/absolute/path/to/pinned-graphify-venv")
+interpreter = runtime / "bin/python"
+config = GraphifyConfig(
+    executable=interpreter,
+    python_path=str(runtime / "lib/python3.14/site-packages"),
+    expected_executable_digest=executable_digest(interpreter),
+)
+store = PublicationStore(private / "publication")
+ledger = UpdateLedger(private / "updates", store)
+runner = UpdateRunner(ledger, config)
+# snapshot is the manifest returned by authorized create_snapshot(...).
+try:
+    predecessor = store.resolve_current(snapshot.project_id, snapshot.repository_id)
+except KeyError:
+    predecessor = None  # explicitly require an empty selection
+runner.submit("operator-owned-idempotency-key", snapshot,
+              expected_current=predecessor)
+status = runner.resume("operator-owned-idempotency-key")
+assert ledger.inspect(status.request_id) == status
+if status.phase == "published":
+    receipt = status.receipt  # exact snapshot/generation, not a moving ref
+else:
+    print(status.phase, status.reasons)
+```
+
+Submit durably captures exact admitted source bytes, snapshot fields, predecessor,
+and extraction identities. Reopening the same ledger and calling `resume` uses
+those saved bytes, not a moving checkout. The same key with changed inputs raises
+`UpdateConflict`. Extraction/config changes cannot reuse acknowledged work.
+`requested`, `extracting`, `staged`, `published` and `blocked` are separate phases.
+Fatal extraction/validation raises its error and records a retryable reason, not
+successful completion. Incomplete inventory records `blocked` without selecting
+or deleting. Valid excluded/unsupported paths produce qualified partial evidence.
+
+A committed checkpoint retains Graphify's native graph/manifest together with
+normalized evidence and digests. Interrupted workspace output is discarded;
+only a validated compatible checkpoint can seed Graphify's incremental route.
+An identical snapshot/config reuses its checkpoint; a new commit with identical
+files still binds a new revision. Unresolved native placeholders without real
+source evidence fail closed (policy follow-up `the_knowitall#88nk`).
+
+`publish(..., expected_current=predecessor)` is conditional. Historical completed
+requests return the saved original receipt without moving `current` backward;
+conflicting unpublished requests must be explicitly resubmitted against a chosen
+new predecessor. Query packets retain the v1 schema and real partial limitations.
+Corrupt persisted evidence is rejected, never trusted because a directory exists.
+
+Use one ledger per publication store on a local POSIX filesystem supporting
+`flock`, atomic rename and directory fsync. The reentrant store lock serializes
+mutations and extraction across processes; this is not a multi-host queue or
+availability guarantee. Private roots must be operator-controlled and inaccessible
+to untrusted writers; digests detect corruption, not adversarial re-signing.
+Requests retain source and checkpoints indefinitely. Do not delete committed
+requests/receipts while idempotent retries or incremental reuse are required.
+Cleanup requires an explicit retention decision; no automatic garbage collector
+or destructive repair is provided. Replace corrupt state only from known-good
+retained evidence, preserving diagnostic copies privately.
+
 ## Local query transport
 
 `QueryService` is the in-process API. `serve_stdio(service, input, output)` adds
