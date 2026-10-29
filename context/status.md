@@ -1,8 +1,10 @@
 # Current state
 
-`regc` implementation is committed through the durable update runner, with final
-conformance/documentation and native branch review in progress. Latest completed
-full run: 156 passed with real pinned Python/TypeScript extraction enabled.
+`regc` implementation and conformance/documentation are committed through
+`940103f`. Native branch review job 326 (range d5ab267..0c2f5cd) is queued behind
+shared daemon work; the subsequent malformed-pointer fix needs review coverage
+before PR delivery. Kata remains open; push/PR and plan cleanup await review.
+Latest completed full run: 160 passed with real pinned Python/TypeScript extraction enabled.
 Contract examples, wheel/sdist (private-state exclusion), compileall and diff
 checks pass. Real partial-coverage and spawned-process extraction-death tests pass.
 
