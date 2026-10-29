@@ -24,6 +24,44 @@ def test_request_acknowledgment_ambiguity_reopens_saved_request(generation_facto
     assert instance.resume("a").phase == "published"
 
 
+@pytest.mark.parametrize("sync_fails", [False, True])
+def test_existing_request_retry_requires_parent_durability(generation_factory, tmp_path, monkeypatch, sync_fails):
+    import knowitall_updates.ledger as module
+
+    generation, snapshot = generation_factory()
+    instance = runner(tmp_path, monkeypatch, generation)
+    original_rename, original_sync = module.os.rename, module.fsync_directory
+
+    def interrupt_after_rename(source, destination):
+        original_rename(source, destination)
+        if destination.parent.name == "requests":
+            raise OSError("interrupted before parent sync")
+
+    monkeypatch.setattr(module.os, "rename", interrupt_after_rename)
+    with pytest.raises(OSError, match="interrupted before parent sync"):
+        instance.submit("a", snapshot, expected_current=None)
+    monkeypatch.setattr(module.os, "rename", original_rename)
+    synced = []
+
+    def sync(path):
+        if path == instance.ledger.root / "requests":
+            if sync_fails:
+                raise OSError("request durability failed")
+            original_sync(path)
+            synced.append(path)
+        else:
+            original_sync(path)
+
+    monkeypatch.setattr(module, "fsync_directory", sync)
+    if sync_fails:
+        with pytest.raises(OSError, match="request durability failed"):
+            instance.submit("a", snapshot, expected_current=None)
+    else:
+        assert instance.submit("a", snapshot, expected_current=None).phase == "requested"
+        assert synced == [instance.ledger.root / "requests"]
+    assert instance.ledger.load_snapshot("a") == snapshot
+
+
 def test_fatal_extraction_is_retryable_and_not_complete(generation_factory, tmp_path, monkeypatch):
     generation, snapshot = generation_factory()
     instance = runner(tmp_path, monkeypatch, generation)

@@ -73,6 +73,7 @@ class UpdateLedger:
                 if self.read_request(request_id) != request:
                     raise UpdateConflict("idempotency key has different immutable inputs")
                 self.load_snapshot(request_id)
+                fsync_directory(path.parent)
                 return self.inspect(request_id)
             temporary = Path(tempfile.mkdtemp(prefix=".request-", dir=path.parent))
             try:
