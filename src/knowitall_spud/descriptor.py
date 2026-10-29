@@ -152,7 +152,7 @@ def _pairs(value: Mapping[str, object], key: str, *, reasons: tuple[str, ...] | 
             scope, reason = entry
         else:
             raise DescriptorError(f"descriptor {key} must be a sequence of (scope, reason) pairs")
-        if not isinstance(scope, str) or not isinstance(reason, str) or not scope or not reason:
+        if not all(isinstance(item, str) and item.strip() for item in (scope, reason)):
             raise DescriptorError(f"descriptor {key} entries must be nonempty strings")
         if reasons is not None and reason not in reasons:
             raise DescriptorError(f"descriptor {key} reason is not supported: {reason!r}")

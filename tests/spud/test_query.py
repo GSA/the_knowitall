@@ -14,6 +14,7 @@ from knowitall_spud.store import AdmissionStore
 
 from conftest import (
     CITATION_INDEX_PATH,
+    GRAPH_NODES,
     GRAPH_PATH,
     GRAPH_REPORT_PATH,
     SOURCE_EVIDENCE_PATH,
@@ -407,4 +408,35 @@ def test_blank_supplied_generator_version_stays_unknown(admitted_bundle, version
     assert {"kind": "provenance", "scope": "descriptor.supplied", "reason": "unknown_generator_version"} in (
         response["missing_evidence"]
     )
+    validate_artifact_response(response)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"label": "   "},
+        {"id": "\t"},
+    ],
+)
+def test_blank_graph_fields_are_retained_as_invalid_records_not_a_crash(admitted_bundle, mutation):
+    nodes = [dict(GRAPH_NODES[0], **mutation), dict(GRAPH_NODES[1])]
+    store, bundle, _receipt = admitted_bundle(graph_override={"nodes": nodes, "edges": []})
+    service = service_for(store)
+
+    response = service.execute(request_for({"kind": "artifact_path", "path": GRAPH_PATH}))
+
+    assert (GRAPH_PATH, "invalid_graph_records") in bundle.limitations
+    assert response["status"] == "partial"
+    validate_artifact_response(response)
+
+
+def test_blank_citation_labels_are_retained_as_invalid_records_not_a_crash(admitted_bundle):
+    nodes = [dict(GRAPH_NODES[0], label="   "), dict(GRAPH_NODES[1])]
+    store, bundle, _receipt = admitted_bundle(citation_index=True, graph_override={"nodes": nodes, "edges": []})
+    service = service_for(store)
+
+    response = service.execute(request_for({"kind": "artifact_path", "path": CITATION_INDEX_PATH}))
+
+    assert (CITATION_INDEX_PATH, "invalid_citation_records") in bundle.limitations
+    assert response["status"] == "partial"
     validate_artifact_response(response)
