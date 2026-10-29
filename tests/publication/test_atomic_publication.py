@@ -1,5 +1,6 @@
 from dataclasses import replace
 import json
+import hashlib
 
 import pytest
 
@@ -91,6 +92,7 @@ def test_publish_rejects_tampered_normalized_evidence(generation_factory, tmp_pa
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     metadata["nodes"][0]["content_digest"] = "sha256:" + "0" * 64
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    metadata_path.with_name("metadata.sha256").write_text(hashlib.sha256(metadata_path.read_bytes()).hexdigest())
 
     with pytest.raises(PublicationValidationError, match="generation identity"):
         store.publish(staged)
