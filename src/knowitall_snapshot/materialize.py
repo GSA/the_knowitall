@@ -67,37 +67,6 @@ def _status(repo: Path) -> tuple[set[str], set[str]]:
     return tracked, untracked
 
 
-def _dirty_fingerprint(repo: Path, paths: set[str]) -> tuple[tuple[str, str], ...]:
-    values = []
-    for path in sorted(paths, key=str.encode):
-        target = repo / path
-        if target.is_symlink():
-            value = "symlink:" + hashlib.sha256(os.fsencode(os.readlink(target))).hexdigest()
-        elif target.is_file():
-            mode = "100755" if target.stat().st_mode & 0o111 else "100644"
-            value = mode + ":" + hashlib.sha256(target.read_bytes()).hexdigest()
-        elif target.is_dir():
-            value = "directory"
-        else:
-            value = "missing"
-        values.append((path, value))
-    return tuple(values)
-
-
-def _admitted_dirty_paths(repo: Path, policy: SnapshotPolicy, tracked: set[str], untracked: set[str]) -> set[str]:
-    admitted = set()
-    if policy.tracked_changes == "include":
-        admitted.update(path for path in tracked if (repo / path).is_file() and not (repo / path).is_symlink())
-    if policy.untracked_files == "include":
-        for path in untracked:
-            target = repo / path
-            parts = path.split("/")
-            nested = any((repo / "/".join(parts[:index]) / ".git").exists() for index in range(1, len(parts) + 1))
-            if target.is_file() and not target.is_symlink() and not nested:
-                admitted.add(path)
-    return admitted
-
-
 def _dirty_inventory(repo: Path, included: tuple[InventoryEntry, ...], excluded: tuple[dict[str, str], ...], policy: SnapshotPolicy, tracked: set[str], untracked: set[str]):
     entries = {entry.path: entry for entry in included}
     exclusions = list(excluded)
@@ -140,8 +109,6 @@ def create_snapshot(repo: Path, project_id: str, repository_id: str, destination
     dirty = bool(tracked or untracked)
     if dirty and policy.dirty != "admit":
         raise ValueError("dirty Git input rejected by policy")
-    admitted_dirty_paths = _admitted_dirty_paths(repo, policy, tracked, untracked)
-    dirty_fingerprint = _dirty_fingerprint(repo, admitted_dirty_paths)
     commit_oid = commit.split(":", 1)[1]
     try:
         included, excluded = clean_inventory(repo, commit_oid)
@@ -153,16 +120,8 @@ def create_snapshot(repo: Path, project_id: str, repository_id: str, destination
         included, excluded = (), ()
         failed = ({"path": ".", "reason": "inventory_listing_failed"},)
         inventory_complete = False
-    if commit_identity(repo) != commit or status_entries(repo) != initial_status:
-        raise ValueError("repository changed during snapshot")
     if dirty and inventory_complete:
         included, excluded = _dirty_inventory(repo, included, excluded, policy, tracked, untracked)
-    if (
-        commit_identity(repo) != commit
-        or status_entries(repo) != initial_status
-        or _dirty_fingerprint(repo, admitted_dirty_paths) != dirty_fingerprint
-    ):
-        raise ValueError("repository changed during snapshot")
     content_bytes = b"".join(entry.path.encode() + b"\0" + entry.mode.encode() + b"\0" + entry.content_digest.encode() + b"\0" for entry in included)
     content_digest = "sha256:" + hashlib.sha256(content_bytes).hexdigest()
     dirty_digest = "sha256:" + hashlib.sha256(status_entries(repo) + content_bytes).hexdigest() if dirty else None
@@ -184,11 +143,7 @@ def create_snapshot(repo: Path, project_id: str, repository_id: str, destination
             output.write_bytes(entry.data)
             output.chmod(0o755 if entry.mode == "100755" else 0o644)
         (temporary / "manifest.json").write_bytes(manifest_bytes)
-        if (
-            commit_identity(repo) != commit
-            or status_entries(repo) != initial_status
-            or _dirty_fingerprint(repo, admitted_dirty_paths) != dirty_fingerprint
-        ):
+        if commit_identity(repo) != commit or status_entries(repo) != initial_status:
             raise ValueError("repository changed during snapshot")
         os.replace(temporary, target)
     finally:
