@@ -331,9 +331,11 @@ class PublicationStore:
     def resolve_current(self, project_id: str, repository_id: str) -> GenerationRef:
         try:
             value = json.loads(self._current_path(project_id, repository_id).read_bytes())
+            reference = GenerationRef(SnapshotRef(**value["snapshot"]), value["generation_id"], value["artifact_digest"])
         except OSError as error:
             raise KeyError((project_id, repository_id)) from error
-        reference = GenerationRef(SnapshotRef(**value["snapshot"]), value["generation_id"], value["artifact_digest"])
+        except (ValueError, KeyError, TypeError) as error:
+            raise PublicationValidationError("invalid current pointer") from error
         if (reference.snapshot.project_id, reference.snapshot.repository_id) != (project_id, repository_id):
             raise PublicationValidationError("current pointer repository mismatch")
         self.open_generation(reference)
