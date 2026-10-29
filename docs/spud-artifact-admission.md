@@ -115,7 +115,7 @@ unless a verified binding supplies `complete` or `partial`.
 | `malformed_graph_json`, `malformed_citation_index` | Bytes were retained but could not be parsed |
 | `unsupported_graph_profile`, `unsupported_citation_profile`, `unsupported_artifact_format` | Retained bytes are outside `spud-reader/v1`'s understood shapes (archives included) |
 | `undecodable_narrative_text` | Narrative bytes are not decodable text |
-| `unknown_generator_version` | The caller supplied no producer version |
+| `unknown_generator_version` | The caller supplied no usable producer version; a blank value is retained but not believed |
 | `skipped_uploads` | A retained manifest reports skipped files |
 | `unverified_source_binding`, `missing_bound_graph`, `unbound_graph_source_files`, `unbound_commit_evidence` | A supplied binding could not be verified against retained evidence |
 

@@ -528,7 +528,9 @@ def normalize_bundle(
         records.extend(produced)
         found.extend(issues)
 
-    if "generator_version" not in value.supplied:
+    version = value.supplied.get("generator_version")
+    if not isinstance(version, str) or not version.strip():
+        # A blank supplied version is no version; it is retained but not believed.
         found.append((SUPPLIED_SCOPE, "unknown_generator_version"))
     for path, fields in manifest_fields.items():
         skipped = fields.get("total_files_skipped") or fields.get("skipped_files")

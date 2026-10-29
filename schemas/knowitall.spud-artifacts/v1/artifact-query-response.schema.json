@@ -48,8 +48,8 @@
     "continuation": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]}
   },
   "$defs": {
-    "identity": {"type": "string", "minLength": 1},
-    "optional_identity": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]},
+    "identity": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "optional_identity": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/identity"}]},
     "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(/|$))[^/]+(?:/[^/]+)*$"},
     "locator": {
