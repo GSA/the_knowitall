@@ -565,7 +565,8 @@ def normalize_bundle(
         if bound_snapshot is not None:
             revision_binding = BINDING_BOUND
             supplied_coverage = value.source_binding.get("source_coverage")
-            if supplied_coverage in {"complete", "partial"}:
+            # Coverage the caller did not state usably stays unknown, never inferred.
+            if isinstance(supplied_coverage, str) and supplied_coverage in {"complete", "partial"}:
                 source_coverage = supplied_coverage
         else:
             revision_binding = BINDING_ASSERTED if asserted else BINDING_UNKNOWN

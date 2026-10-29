@@ -107,7 +107,8 @@ establish a commit identity. One binding names one graph digest, so a bundle
 retaining more than one graph keeps the `ambiguous_bound_graph` limitation
 rather than extending a verified binding to an unverified graph. A
 bare `commit_sha` is always only `asserted`. Source coverage stays `unknown`
-unless a verified binding supplies `complete` or `partial`.
+unless a verified binding supplies exactly `complete` or `partial`; any other
+supplied value is not a coverage statement and leaves coverage `unknown`.
 
 ## Limitation reasons
 
