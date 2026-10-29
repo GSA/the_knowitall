@@ -3,6 +3,11 @@ import json
 
 import pytest
 
+from knowitall_spud.artifacts import read_bundle
+from knowitall_spud.descriptor import BundleLimits, load_descriptor, resolve_artifacts
+from knowitall_spud.records import normalize_bundle
+from knowitall_spud.store import AdmissionStore
+
 
 GRAPH_NODES = [
     {
@@ -116,6 +121,15 @@ def write_file(bundle_root, relative, text):
     return path
 
 
+def normalize_bundle_at(bundle_root, descriptor_value, limits=None):
+    """Run the full descriptor -> selection -> retention -> normalization path."""
+    descriptor = load_descriptor(descriptor_value)
+    limits = limits or BundleLimits()
+    selected, limitations = resolve_artifacts(bundle_root, descriptor, limits)
+    retained = read_bundle(bundle_root, selected, limits, descriptor.expected_digests)
+    return normalize_bundle(descriptor, retained, limitations)
+
+
 @pytest.fixture
 def make_bundle(tmp_path):
     """Write a synthetic SPUD bundle and return (bundle_root, descriptor_value)."""
@@ -197,5 +211,20 @@ def make_bundle(tmp_path):
         elif layout != "auto":
             descriptor_value["layout"] = layout
         return bundle_root, descriptor_value
+
+    return make
+
+
+@pytest.fixture
+def admitted_bundle(tmp_path, make_bundle):
+    """Admit a synthetic bundle and return (store, normalized bundle, receipt)."""
+
+    default_store = AdmissionStore(tmp_path / "admissions")
+
+    def make(*, store=None, admit=True, failpoint=None, limits=None, **kwargs):
+        target = default_store if store is None else store
+        bundle = normalize_bundle_at(*make_bundle(**kwargs), limits=limits)
+        receipt = target.admit(bundle, failpoint=failpoint) if admit else None
+        return target, bundle, receipt
 
     return make
