@@ -39,6 +39,7 @@ BINDING_BOUND = "bound"
 COMMIT_KEYS = ("commit_sha", "commit", "revision", "source_commit")
 NARRATIVE_ROLES = ("graph_report", "article")
 MANIFEST_ROLES = ("okf_manifest", "run_manifest")
+OPAQUE_ROLES = ("archive",)
 SUPPLIED_SCOPE = "descriptor.supplied"
 
 _KIND_PREFIX = {
@@ -440,6 +441,8 @@ def normalize_bundle(
         elif artifact.role in MANIFEST_ROLES:
             produced, issues = _manifest_records(artifact)
             manifest_fields[artifact.path] = read_flat_yaml(artifact.data)
+        elif artifact.role in OPAQUE_ROLES:
+            produced, issues = (), ((artifact.path, "unsupported_artifact_format"),)
         else:
             produced, issues = (), ()
         records.extend(produced)
