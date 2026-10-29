@@ -21,13 +21,13 @@ def safe_path(value: str) -> PurePosixPath:
     return path
 
 
-def clean_inventory(repo: Path) -> tuple[tuple[InventoryEntry, ...], tuple[dict[str, str], ...]]:
-    raw = run_git(repo, "ls-files", "--stage", "-z", text=False)
+def clean_inventory(repo: Path, commit: str = "HEAD") -> tuple[tuple[InventoryEntry, ...], tuple[dict[str, str], ...]]:
+    raw = run_git(repo, "ls-tree", "-r", "-z", commit, text=False)
     included = []
     excluded = []
     for record in filter(None, raw.split(b"\0")):
         metadata, raw_path = record.split(b"\t", 1)
-        mode, _object_id, _stage = metadata.split(b" ")
+        mode, _kind, object_id = metadata.split(b" ")
         path = raw_path.decode("utf-8", "strict")
         safe_path(path)
         if mode == b"160000":
@@ -39,6 +39,6 @@ def clean_inventory(repo: Path) -> tuple[tuple[InventoryEntry, ...], tuple[dict[
         if mode not in {b"100644", b"100755"}:
             excluded.append({"path": path, "reason": "unsupported_git_mode"})
             continue
-        data = run_git(repo, "show", f"HEAD:{path}", text=False)
+        data = run_git(repo, "cat-file", "blob", object_id.decode("ascii"), text=False)
         included.append(InventoryEntry(path, "sha256:" + hashlib.sha256(data).hexdigest(), data, mode.decode("ascii")))
     return tuple(sorted(included, key=lambda item: item.path.encode())), tuple(sorted(excluded, key=lambda item: item["path"].encode()))

@@ -71,7 +71,7 @@ def test_inventory_failure_does_not_return_a_deletion_authority(make_repo, tmp_p
     repo = make_repo()
     import knowitall_snapshot.materialize as materialize
 
-    monkeypatch.setattr(materialize, "clean_inventory", lambda _repo: (_ for _ in ()).throw(GitError("listing failed")))
+    monkeypatch.setattr(materialize, "clean_inventory", lambda *_args: (_ for _ in ()).throw(GitError("listing failed")))
 
     snapshot = create_snapshot(repo, "project", "repo", tmp_path / "out", SnapshotPolicy(inventory_errors="record"))
 

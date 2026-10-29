@@ -8,9 +8,15 @@ class GitError(ValueError):
 
 
 def run_git(repo: Path, *args: str, text: bool = True):
-    env = {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", ""), "GIT_CONFIG_NOSYSTEM": "1"}
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_SYSTEM": os.devnull,
+    }
     result = subprocess.run(
-        ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.autocrlf=false", *args],
+        ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.autocrlf=false", "-c", "core.fsmonitor=false", *args],
         cwd=repo, env=env, capture_output=True, text=text, check=False,
     )
     if result.returncode:
