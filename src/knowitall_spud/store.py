@@ -4,6 +4,9 @@ Retained bytes, normalized records and the admission receipt are staged in a
 private temporary directory and published with a single rename, so an
 interrupted admission never becomes queryable. Storage paths are derived from
 hashes of the caller's identity, never from caller-supplied names.
+
+Admission, recovery and discard hold an exclusive store lock, so reclamation
+never removes evidence an in-flight admission is about to acknowledge.
 """
 
 from __future__ import annotations
@@ -16,8 +19,11 @@ import re
 import shutil
 import stat
 import tempfile
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+from knowitall_publication.durable import locked
 
 from .artifacts import RetainedArtifact, content_digest
 from .records import ArtifactRecord, Locator, NormalizedBundle, SourceReference
@@ -131,6 +137,9 @@ def _decode_bundle(value: dict[str, object], payloads: dict[str, bytes]) -> Norm
             raise AdmissionValidationError(f"retained artifact {item['path']!r} digest mismatch")
         artifacts.append(RetainedArtifact(item["role"], item["path"], digest, data))
     bound = value.get("bound_snapshot")
+    supplied_binding = value.get("supplied_binding")
+    if supplied_binding is not None and not isinstance(supplied_binding, dict):
+        raise AdmissionValidationError("retained supplied_binding is not a mapping")
     return NormalizedBundle(
         project_id=value["project_id"],
         repository_id=value["repository_id"],
@@ -144,6 +153,7 @@ def _decode_bundle(value: dict[str, object], payloads: dict[str, bytes]) -> Norm
         source_coverage=value["source_coverage"],
         revision_binding=value["revision_binding"],
         bound_snapshot=dict(bound) if bound is not None else None,
+        supplied_binding=deepcopy(supplied_binding) if supplied_binding is not None else None,
     )
 
 
@@ -186,6 +196,14 @@ class AdmissionStore:
         for path in (self.root, self.root / "bundles", self.root / "index"):
             if stat.S_IMODE(path.stat().st_mode) != _DIRECTORY_MODE:
                 path.chmod(_DIRECTORY_MODE)
+        lock = self.root / ".lock"
+        if not lock.exists():
+            # The lock file itself carries no evidence; it only has to exist
+            # before any admission or recovery can contend for the store.
+            os.close(os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_CLOEXEC, _FILE_MODE))
+            _fsync_directory(self.root)
+        if stat.S_IMODE(lock.stat().st_mode) != _FILE_MODE:
+            lock.chmod(_FILE_MODE)
 
     def _bundle_path(self, project_id: str, repository_id: str, bundle_id: str) -> Path:
         return self.root / "bundles" / _key(project_id, repository_id, bundle_id)
@@ -293,6 +311,10 @@ class AdmissionStore:
     def admit(self, bundle: NormalizedBundle, *, failpoint: str | None = None) -> AdmissionReceipt:
         if failpoint is not None and failpoint not in FAILPOINTS:
             raise AdmissionValidationError(f"unsupported failpoint: {failpoint!r}")
+        with locked(self.root):
+            return self._admit(bundle, failpoint)
+
+    def _admit(self, bundle: NormalizedBundle, failpoint: str | None) -> AdmissionReceipt:
         receipt = _receipt(bundle)
         destination = self._bundle_path(bundle.project_id, bundle.repository_id, bundle.bundle_id)
         if destination.exists():
@@ -390,6 +412,10 @@ class AdmissionStore:
 
     def discard_damaged(self, project_id: str, repository_id: str, bundle_id: str) -> None:
         """Remove a damaged bundle and its pointer so the id can be re-admitted."""
+        with locked(self.root):
+            self._discard_damaged(project_id, repository_id, bundle_id)
+
+    def _discard_damaged(self, project_id: str, repository_id: str, bundle_id: str) -> None:
         key = self._pointer_key(project_id, repository_id, bundle_id)
         directory = self.root / "bundles" / key
         try:
@@ -404,6 +430,10 @@ class AdmissionStore:
         _fsync_directory(self._index_path(project_id, repository_id))
 
     def recover(self) -> tuple[str, ...]:
+        with locked(self.root):
+            return self._recover()
+
+    def _recover(self) -> tuple[str, ...]:
         bundles = self.root / "bundles"
         for temporary in bundles.glob(".admit-*"):
             shutil.rmtree(temporary, ignore_errors=True)

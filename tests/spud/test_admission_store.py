@@ -1,6 +1,7 @@
 import hashlib
 import json
 import stat
+import threading
 from dataclasses import replace
 from pathlib import Path
 
@@ -15,7 +16,13 @@ from knowitall_spud.store import (
     AdmissionValidationError,
 )
 
+from knowitall_spud.store import _receipt as _receipt_of
+
 from conftest import GRAPH_PATH, GRAPH_REPORT_PATH, normalize_bundle_at
+
+
+def _receipt_digest(bundle):
+    return _receipt_of(bundle).receipt_digest
 
 
 def test_admit_persists_bytes_and_returns_stable_receipt(tmp_path, admitted_bundle):
@@ -370,3 +377,43 @@ def test_a_new_store_root_persists_every_created_ancestor(tmp_path, monkeypatch)
     for created in (tmp_path / "outer", tmp_path / "outer" / "inner", root, root / "bundles", root / "index"):
         assert created.parent in synced, created
     assert synced.index(tmp_path) < synced.index(tmp_path / "outer") < synced.index(root)
+
+
+def test_recovery_cannot_reclaim_a_bundle_mid_admission(tmp_path, make_bundle, monkeypatch):
+    store = AdmissionStore(tmp_path / "admissions")
+    bundle = normalize_bundle_at(*make_bundle())
+    publish = AdmissionStore._publish_pointer
+    recovered = []
+    workers = []
+
+    def interleaved(self, value):
+        worker = threading.Thread(target=lambda: recovered.append(AdmissionStore(self.root).recover()))
+        workers.append(worker)
+        worker.start()
+        worker.join(0.5)
+        # Recovery waits for the admission instead of reclaiming its retained bytes.
+        assert worker.is_alive()
+        publish(self, value)
+
+    monkeypatch.setattr(AdmissionStore, "_publish_pointer", interleaved)
+    receipt = store.admit(bundle)
+    for worker in workers:
+        worker.join(5)
+        assert not worker.is_alive()
+
+    assert recovered == [("bundle-1",)]
+    assert store.open_bundle("project-a", "repo-a", "bundle-1")[1] == receipt
+
+
+def test_a_changed_unverified_binding_assertion_conflicts(tmp_path, admitted_bundle, make_bundle):
+    binding = {"commit_sha": "4" * 40, "graph_digest": "sha256:" + "0" * 64}
+    store, _bundle, receipt = admitted_bundle(source_binding=binding)
+    other_root, other_value = make_bundle(
+        source_binding={"commit_sha": "5" * 40, "graph_digest": "sha256:" + "0" * 64}
+    )
+    other = normalize_bundle_at(other_root, other_value)
+
+    assert _receipt_digest(other) != receipt.receipt_digest
+    with pytest.raises(AdmissionConflict, match="different retained metadata"):
+        store.admit(other)
+    assert store.open_bundle("project-a", "repo-a", "bundle-1")[0].supplied_binding == binding

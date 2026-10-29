@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 
 from .artifacts import RetainedArtifact, is_digest
@@ -101,6 +102,7 @@ class NormalizedBundle:
     source_coverage: str
     revision_binding: str
     bound_snapshot: dict[str, str] | None
+    supplied_binding: dict[str, object] | None
 
 
 def _record_id(kind: str, locator: Locator, identity: Sequence[str | None]) -> str:
@@ -592,4 +594,7 @@ def normalize_bundle(
         source_coverage=source_coverage,
         revision_binding=revision_binding,
         bound_snapshot=bound_snapshot,
+        # The caller's assertion is retained whether or not it verified, so a
+        # rejected binding stays distinguishable from a different rejected one.
+        supplied_binding=deepcopy(value.source_binding) if value.source_binding is not None else None,
     )
