@@ -138,7 +138,8 @@ miss as absence.
 
 `AdmissionStore` persists bytes, metadata and a recomputed receipt under a
 hash-derived private directory tree (`0o700`), publishing each bundle with a
-single atomic rename. The receipt digest covers the complete normalized
+single atomic rename, persisting every newly created directory entry in its
+parent before acknowledging the admission. The receipt digest covers the complete normalized
 metadata, including record payloads, artifact roles and supplied provenance, so
 an edit to retained metadata fails read-back verification. An exact retry of the same bundle returns the same
 receipt; changed bytes, changed metadata or an added companion raises
