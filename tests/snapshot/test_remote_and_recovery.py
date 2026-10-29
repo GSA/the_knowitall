@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from conftest import git
-from knowitall_snapshot import SnapshotPolicy, acquire_remote, create_snapshot
+from knowitall_snapshot import RemoteCheckout, SnapshotPolicy, checkout_remote, create_snapshot
 
 
 def test_remote_clone_and_fetch_capture_origin_without_changing_repository_identity(make_repo, tmp_path):
@@ -16,7 +16,8 @@ def test_remote_clone_and_fetch_capture_origin_without_changing_repository_ident
     remote = tmp_path / "upstream.git"
     git(upstream, "clone", "--bare", "-q", str(upstream), str(remote))
 
-    checkout = acquire_remote(str(remote), tmp_path / "checkout")
+    checkout = checkout_remote(str(remote), tmp_path / "checkout")
+    assert isinstance(checkout, RemoteCheckout)
     first = create_snapshot(
         checkout.path,
         "project",
@@ -31,7 +32,7 @@ def test_remote_clone_and_fetch_capture_origin_without_changing_repository_ident
     git(upstream, "commit", "-qm", "change")
     git(upstream, "push", "-q", str(remote), "HEAD")
 
-    refreshed = acquire_remote(str(remote), tmp_path / "checkout")
+    refreshed = checkout_remote(str(remote), tmp_path / "checkout")
     second = create_snapshot(
         refreshed.path,
         "project",
@@ -51,7 +52,7 @@ def test_remote_refresh_never_executes_checkout_filters(make_repo, tmp_path):
     upstream = make_repo()
     remote = tmp_path / "upstream.git"
     git(upstream, "clone", "--bare", "-q", str(upstream), str(remote))
-    checkout = acquire_remote(str(remote), tmp_path / "checkout")
+    checkout = checkout_remote(str(remote), tmp_path / "checkout")
     marker = tmp_path / "smudge-ran"
     filter_command = f"sh -c 'touch {marker}; cat'"
     git(checkout.path, "config", "filter.hostile.smudge", filter_command)
@@ -61,7 +62,7 @@ def test_remote_refresh_never_executes_checkout_filters(make_repo, tmp_path):
     git(upstream, "commit", "-qm", "add filter attributes")
     git(upstream, "push", "-q", str(remote), "HEAD")
 
-    acquire_remote(str(remote), checkout.path)
+    checkout_remote(str(remote), checkout.path)
 
     assert not marker.exists()
     assert (checkout.path / "src" / "orders.py").is_file()
@@ -74,7 +75,7 @@ def test_remote_refresh_never_executes_checkout_filters(make_repo, tmp_path):
     assert configured_filters.returncode == 1
 
 
-def test_acquired_symlink_repository_can_be_snapshotted_with_default_policy(make_repo, tmp_path):
+def test_remote_checkout_symlink_repository_can_be_snapshotted_with_default_policy(make_repo, tmp_path):
     upstream = make_repo()
     os.symlink("src/orders.py", upstream / "orders-link.py")
     git(upstream, "add", "orders-link.py")
@@ -82,13 +83,13 @@ def test_acquired_symlink_repository_can_be_snapshotted_with_default_policy(make
     remote = tmp_path / "upstream.git"
     git(upstream, "clone", "--bare", "-q", str(upstream), str(remote))
 
-    checkout = acquire_remote(str(remote), tmp_path / "checkout")
+    checkout = checkout_remote(str(remote), tmp_path / "checkout")
     snapshot = create_snapshot(checkout.path, "project", "repository", tmp_path / "snapshots", SnapshotPolicy())
 
     assert any(item["path"] == "orders-link.py" and item["reason"] == "symlink_excluded" for item in snapshot.excluded)
 
 
-def test_acquired_submodule_repository_can_be_snapshotted_with_default_policy(make_repo, tmp_path):
+def test_remote_checkout_submodule_repository_can_be_snapshotted_with_default_policy(make_repo, tmp_path):
     child = make_repo("typescript_client")
     upstream = make_repo()
     git(upstream, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(child), "vendor/client")
@@ -96,14 +97,14 @@ def test_acquired_submodule_repository_can_be_snapshotted_with_default_policy(ma
     remote = tmp_path / "upstream.git"
     git(upstream, "clone", "--bare", "-q", str(upstream), str(remote))
 
-    checkout = acquire_remote(str(remote), tmp_path / "checkout")
+    checkout = checkout_remote(str(remote), tmp_path / "checkout")
     snapshot = create_snapshot(checkout.path, "project", "repository", tmp_path / "snapshots", SnapshotPolicy())
 
     assert any(item["path"] == "vendor/client" and item["reason"] == "submodule_excluded" for item in snapshot.excluded)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="byte-valued symlink targets require POSIX")
-def test_acquired_non_utf8_symlink_can_be_snapshotted_with_default_policy(make_repo, tmp_path):
+def test_remote_checkout_non_utf8_symlink_can_be_snapshotted_with_default_policy(make_repo, tmp_path):
     upstream = make_repo()
     os.symlink(b"non-utf8-\xff", os.fsencode(upstream / "raw-link"))
     git(upstream, "add", "raw-link")
@@ -111,8 +112,8 @@ def test_acquired_non_utf8_symlink_can_be_snapshotted_with_default_policy(make_r
     remote = tmp_path / "upstream.git"
     git(upstream, "clone", "--bare", "-q", str(upstream), str(remote))
 
-    checkout = acquire_remote(str(remote), tmp_path / "checkout")
-    checkout = acquire_remote(str(remote), checkout.path)
+    checkout = checkout_remote(str(remote), tmp_path / "checkout")
+    checkout = checkout_remote(str(remote), checkout.path)
     snapshot = create_snapshot(checkout.path, "project", "repository", tmp_path / "snapshots", SnapshotPolicy())
 
     assert os.readlink(os.fsencode(checkout.path / "raw-link")) == b"non-utf8-\xff"
@@ -143,7 +144,7 @@ def test_remote_discovery_never_invokes_checkout_credential_helper(make_repo, tm
     monkeypatch.chdir(current)
     try:
         with pytest.raises(Exception):
-            acquire_remote("https://credential-test.invalid/repo.git", tmp_path / "checkout")
+            checkout_remote("https://credential-test.invalid/repo.git", tmp_path / "checkout")
     finally:
         server.shutdown()
         thread.join()
@@ -154,10 +155,10 @@ def test_remote_discovery_never_invokes_checkout_credential_helper(make_repo, tm
 
 def test_remote_intake_rejects_credential_bearing_origins(tmp_path):
     with pytest.raises(ValueError, match="credentials"):
-        acquire_remote("https://user:secret@example.invalid/repo.git", tmp_path / "checkout")
+        checkout_remote("https://user:secret@example.invalid/repo.git", tmp_path / "checkout")
 
 
-def test_sha256_remote_acquisition_and_refresh_preserve_object_format(make_repo, tmp_path):
+def test_sha256_remote_checkout_and_refresh_preserve_object_format(make_repo, tmp_path):
     if subprocess.run(["git", "init", "--object-format=sha256", "--bare", str(tmp_path / "probe")], capture_output=True).returncode:
         pytest.skip("Git does not support SHA-256 repositories")
     upstream = tmp_path / "upstream-sha256"
@@ -171,8 +172,8 @@ def test_sha256_remote_acquisition_and_refresh_preserve_object_format(make_repo,
     remote = tmp_path / "upstream-sha256.git"
     git(upstream, "clone", "--bare", "-q", str(upstream), str(remote))
 
-    checkout = acquire_remote(str(remote), tmp_path / "checkout")
-    acquire_remote(str(remote), checkout.path)
+    checkout = checkout_remote(str(remote), tmp_path / "checkout")
+    checkout_remote(str(remote), checkout.path)
 
     assert git(checkout.path, "rev-parse", "--show-object-format") == "sha256"
     assert create_snapshot(checkout.path, "project", "repository", tmp_path / "snapshots", SnapshotPolicy()).commit.startswith("sha256:")
@@ -230,20 +231,20 @@ def test_snapshot_survives_removed_remote_and_changed_checkout(make_repo, tmp_pa
     upstream = make_repo()
     remote = tmp_path / "upstream.git"
     git(upstream, "clone", "--bare", "-q", str(upstream), str(remote))
-    acquired = acquire_remote(str(remote), tmp_path / "checkout")
+    checkout = checkout_remote(str(remote), tmp_path / "checkout")
     snapshot = create_snapshot(
-        acquired.path,
+        checkout.path,
         "project",
         "repository",
         tmp_path / "snapshots",
         SnapshotPolicy(),
-        origin=acquired.origin,
+        origin=checkout.origin,
     )
     retained = tmp_path / "snapshots" / snapshot.snapshot_id / "source" / "src" / "orders.py"
     retained_bytes = retained.read_bytes()
 
     shutil.rmtree(remote)
-    (acquired.path / "src" / "orders.py").write_text("working tree changed\n", encoding="utf-8")
+    (checkout.path / "src" / "orders.py").write_text("working tree changed\n", encoding="utf-8")
 
     assert retained.read_bytes() == retained_bytes
     assert snapshot.inventory_complete is True

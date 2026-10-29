@@ -7,10 +7,10 @@ extraction, atomic publication, and revision-bound v1 dependency queries.
 ## Scope
 
 The tests create temporary Git repositories from checked-in synthetic Python and
-TypeScript files. They do not acquire, execute, or publish external source. A
+TypeScript files. They do not fetch, execute, or publish external source. A
 passing run proves only this bounded synthetic contract. It is **not** validation
-against Acquire, authorization to ingest Acquire, or evidence of production
-readiness, scale, availability, or semantic completeness.
+against external repositories, authorization to ingest production repositories, or
+evidence of production readiness, scale, availability, or semantic completeness.
 
 ## Prerequisites and dependency integrity
 
@@ -38,7 +38,7 @@ runtime-integrity claim; see
 
 The library accepts either an explicitly supplied local Git checkout through
 `create_snapshot(...)` or one explicitly configured remote through
-`acquire_remote(origin, destination)`. Remote acquisition clones without tags
+`checkout_remote(origin, destination)`. Remote checkout clones without tags
 or submodules, or fetches and hard-resets an existing dedicated checkout to
 `origin/HEAD`; it never discovers repositories. Interactive prompting and Git
 credential helpers are disabled, and origins containing embedded credentials
