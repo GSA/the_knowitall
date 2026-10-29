@@ -90,13 +90,14 @@ def _materialize_commit(destination: Path, commit: str) -> None:
         target.write_bytes(entry.data)
         target.chmod(stat.S_IRUSR | stat.S_IWUSR | (stat.S_IXUSR if entry.mode == "100755" else 0))
     for item in excluded:
-        if item["reason"] != "symlink_excluded":
-            continue
         path = str(safe_path(item["path"]))
         target = destination / path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        link_target = run_git(destination, "show", f"{commit}:{path}", text=False).decode("utf-8", "strict")
-        os.symlink(link_target, target)
+        if item["reason"] == "submodule_excluded":
+            target.mkdir(parents=True, exist_ok=True)
+        elif item["reason"] == "symlink_excluded":
+            target.parent.mkdir(parents=True, exist_ok=True)
+            link_target = run_git(destination, "show", f"{commit}:{path}", text=False)
+            os.symlink(link_target, os.fsencode(target))
     _run("read-tree", commit, cwd=destination)
 
 
