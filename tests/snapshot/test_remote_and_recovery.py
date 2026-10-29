@@ -72,9 +72,44 @@ def test_remote_refresh_never_executes_checkout_filters(make_repo, tmp_path):
     assert configured_filters.returncode == 1
 
 
+def test_acquired_symlink_repository_can_be_snapshotted_with_default_policy(make_repo, tmp_path):
+    upstream = make_repo()
+    os.symlink("src/orders.py", upstream / "orders-link.py")
+    git(upstream, "add", "orders-link.py")
+    git(upstream, "commit", "-qm", "add symlink")
+    remote = tmp_path / "upstream.git"
+    git(upstream, "clone", "--bare", "-q", str(upstream), str(remote))
+
+    checkout = acquire_remote(str(remote), tmp_path / "checkout")
+    snapshot = create_snapshot(checkout.path, "project", "repository", tmp_path / "snapshots", SnapshotPolicy())
+
+    assert any(item["path"] == "orders-link.py" and item["reason"] == "symlink_excluded" for item in snapshot.excluded)
+
+
 def test_remote_intake_rejects_credential_bearing_origins(tmp_path):
     with pytest.raises(ValueError, match="credentials"):
         acquire_remote("https://user:secret@example.invalid/repo.git", tmp_path / "checkout")
+
+
+def test_sha256_remote_acquisition_and_refresh_preserve_object_format(make_repo, tmp_path):
+    if subprocess.run(["git", "init", "--object-format=sha256", "--bare", str(tmp_path / "probe")], capture_output=True).returncode:
+        pytest.skip("Git does not support SHA-256 repositories")
+    upstream = tmp_path / "upstream-sha256"
+    upstream.mkdir()
+    git(upstream, "init", "--object-format=sha256", "-q")
+    git(upstream, "config", "user.name", "Synthetic Test")
+    git(upstream, "config", "user.email", "synthetic@example.invalid")
+    (upstream / "source.py").write_text("value = 1\n", encoding="utf-8")
+    git(upstream, "add", ".")
+    git(upstream, "commit", "-qm", "fixture")
+    remote = tmp_path / "upstream-sha256.git"
+    git(upstream, "clone", "--bare", "-q", str(upstream), str(remote))
+
+    checkout = acquire_remote(str(remote), tmp_path / "checkout")
+    acquire_remote(str(remote), checkout.path)
+
+    assert git(checkout.path, "rev-parse", "--show-object-format") == "sha256"
+    assert create_snapshot(checkout.path, "project", "repository", tmp_path / "snapshots", SnapshotPolicy()).commit.startswith("sha256:")
 
 
 def test_materialization_preserves_executable_permission(make_repo, tmp_path):
