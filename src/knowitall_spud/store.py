@@ -30,6 +30,19 @@ _FILE_MODE = 0o600
 _BUNDLE_KEY_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
+def _read_pointer(value: object) -> tuple[tuple[str, str, str], str] | None:
+    """Read a validated index pointer, or None when it is structurally damaged."""
+    if not isinstance(value, dict):
+        return None
+    key = value.get("bundle_key")
+    identity = tuple(value.get(field) for field in ("project_id", "repository_id", "bundle_id"))
+    if not all(isinstance(item, str) and item for item in identity):
+        return None
+    if not isinstance(key, str) or not _BUNDLE_KEY_PATTERN.match(key):
+        return None
+    return identity, key  # type: ignore[return-value]
+
+
 class AdmissionConflict(ValueError):
     """A bundle identity was reused with different bytes, metadata, or selection."""
 
@@ -300,13 +313,10 @@ class AdmissionStore:
             value = json.loads(pointer.read_bytes())
         except (OSError, json.JSONDecodeError) as error:
             raise KeyError((project_id, repository_id, bundle_id)) from error
-        key = value.get("bundle_key")
-        identity = (value.get("project_id"), value.get("repository_id"), value.get("bundle_id"))
-        if identity != (project_id, repository_id, bundle_id):
+        read = _read_pointer(value)
+        if read is None or read[0] != (project_id, repository_id, bundle_id):
             raise KeyError((project_id, repository_id, bundle_id))
-        if not isinstance(key, str) or not _BUNDLE_KEY_PATTERN.match(key):
-            raise KeyError((project_id, repository_id, bundle_id))
-        return key
+        return read[1]
 
     def open_bundle(self, project_id: str, repository_id: str, bundle_id: str) -> tuple[NormalizedBundle, AdmissionReceipt]:
         key = self._pointer_key(project_id, repository_id, bundle_id)
@@ -324,9 +334,12 @@ class AdmissionStore:
             if pointer.name.startswith("."):
                 continue
             try:
-                found.append(json.loads(pointer.read_bytes())["bundle_id"])
-            except (OSError, KeyError, json.JSONDecodeError):
+                value = json.loads(pointer.read_bytes())
+            except (OSError, json.JSONDecodeError):
                 continue
+            read = _read_pointer(value)
+            if read is not None and read[0][:2] == (project_id, repository_id):
+                found.append(read[0][2])
         return tuple(sorted(found))
 
     def _pointers(self) -> tuple[tuple[tuple[str, str, str], str], ...]:
@@ -343,12 +356,11 @@ class AdmissionStore:
                     continue
                 try:
                     value = json.loads(pointer.read_bytes())
-                    identity = (value["project_id"], value["repository_id"], value["bundle_id"])
-                    key = value["bundle_key"]
-                except (OSError, KeyError, json.JSONDecodeError):
-                    continue
-                if isinstance(key, str) and _BUNDLE_KEY_PATTERN.match(key):
-                    found.append((identity, key))
+                except (OSError, json.JSONDecodeError):
+                    continue  # a damaged pointer names nothing; enumeration continues
+                read = _read_pointer(value)
+                if read is not None:
+                    found.append(read)
         return tuple(sorted(found))
 
     def damaged_bundles(self) -> tuple[tuple[str, str, str], ...]:

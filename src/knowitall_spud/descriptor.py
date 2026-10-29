@@ -54,6 +54,7 @@ LIMITATION_REASONS = (
     "missing_source_evidence",
     "no_articles_selected",
     "skipped_uploads",
+    "unbound_commit_evidence",
     "unbound_graph_source_files",
     "undecodable_narrative_text",
     "unknown_generator_version",

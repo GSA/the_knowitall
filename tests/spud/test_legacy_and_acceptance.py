@@ -87,6 +87,7 @@ def test_legacy_layout_without_explicit_selection_surfaces_ambiguity(make_bundle
 def test_complete_bundle_vertical_slice(tmp_path, make_bundle):
     evidence = {
         "snapshot_id": "snapshot-1",
+        "commit": "1" * 40,
         "files": [
             {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
             {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},
