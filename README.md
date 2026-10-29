@@ -1,171 +1,197 @@
 # The Knowitall
 
-Code context and revision-bound repository knowledge graphs for engineering.
+> **Status: untested on real code.** So far it has only been tested on
+> synthetic Python and TypeScript fixtures.
+>
+> **Known blocker (Kata `88nk`):** real repositories currently fail during
+> extraction. When code references something outside the repository, such as
+> `ValueError`, Graphify adds a placeholder node with no source file. The
+> Knowitall then rejects the whole graph with `native node is not deterministic
+> admitted-source evidence`. Fix this before ingesting real code.
 
-**Status: contract defined with a local synthetic slice, October 28, 2026.** Public repository:
-https://github.com/GSA/the_knowitall, tracked locally under Kata project
-`the_knowitall` (`.kata.toml`).
+The Knowitall builds a code knowledge graph for a specific Git commit and answers
+questions about that code. Agents use it to look up code facts: where a symbol
+is defined, what it calls or imports, which symbols are in a file, and what a
+line range contains. Every answer names the snapshot and commit it came from,
+and states how complete the coverage is.
 
-## Product boundaries
+GitHub: `GSA/the_knowitall`. Local checkout: `~/the_knowitall`. Kata project: `the_knowitall`.
 
-| Product | Responsibility |
-| --- | --- |
-| **The Knowitall** | Authorized repository intake, immutable source snapshots, code graph production, technical provenance, and revision/coverage-aware queries |
-| **The Librarian** | Business-source intake, originals/renditions, entities/claims, evidence-backed relationships, qualification, corrections, and retrieval |
-| **The Engineer** | Kata issues, Forge workspaces/agents/PRs, roborev review, AgentsView visibility, selective agent-event memory, and consumption of both context providers |
-| **SPUD** | Independently maintained documentation and analysis product |
+**Intended use:** **The Engineer** (`~/kenn-kopy`) and its Pi or Forge agents
+query The Knowitall for code context while they work on tasks. Business rules and
+documents belong in **The Librarian**.
 
-Routing follows purpose: technical repository context lives in Knowitall, while
-business rules and institutional knowledge live in Librarian with shared source
-and version references.
+## How it works
 
-## Findings from the SPUD & Graphify evaluation
+1. **Snapshot:** copy a Git repository (from a URL or local path) at an exact commit.
+2. **Extract:** run pinned Graphify `0.9.96` offline over the snapshot. Later
+   runs update the graph incrementally, and interrupted runs can be resumed.
+3. **Publish:** validate the graph and publish it to a local store.
+4. **Query:** answer `knowitall.code-context/v1` JSON requests (`symbol`,
+   `dependencies`, `path`, `source_range`).
 
-Evaluated baselines: SPUD `c80837a`, SPUD Web `8e9626d`, Graphify `0.9.96`
-(`dac063456bc1f5d92354ec3936fd9dd1513a83f3`), Confluence exporter `v0.2.4`
-(`b310442e22b9501c2527fa344ef272185e427e50`), and Jira exporter `v0.3.4`
-(`7894cba1de887452667d1e54594df13f878e1686`).
+This is a Python library. It has no CLI, network service, or MCP server yet.
 
-- **Graphify** provides typed graphs, source locators, deterministic AST/code extraction, incremental updates/deletions, and query/MCP operations.
-- **Jira and Confluence exporters** are standalone packages that output raw JSON, Markdown, and attachments directly.
-- **Ingestion durability requirements:** per-document/page/attachment completion tracking, watermark advancement only after complete export, and explicit error propagation for attachment and persistence failures.
+## Setup
 
-## Reuse and integration plan
-
-| Capability | Approach |
-| --- | --- |
-| Graphify parsing and graph queries | Pinned dependency wrapped in Knowitall's snapshot and evidence contract |
-| Repository intake and graph publication | Knowitall implementation using Git and Graphify incremental extraction |
-| Existing SPUD graph/technical outputs | Optional Knowitall admission adapter recording revision and coverage |
-| Jira/Confluence export and reconciliation | Librarian adapters over standalone exporters with durable retry and reconciliation |
-| Docling extraction | Librarian's existing offline Docling lifecycle plus qualified-retrieval admission |
-| OKF metadata/rendition conventions | Supported in Librarian's receiving contract where identity and evidence are preserved |
-| Drive and manual file upload | Librarian source adapters feeding the retained-original and receipt lifecycle |
-
-## Repository ingestion and graph building
-
-```text
-approved local checkout / read-only remote
-  -> resolve exact commit revision and source scope
-  -> retain immutable snapshot + content/coverage manifest
-  -> pinned deterministic Graphify extraction
-  -> validate graph, provenance, and coverage
-  -> atomically publish a queryable snapshot
-```
-
-1. **Snapshot identity:** Resolve branches/tags to an exact commit SHA and record a manifest binding project/repository identity, origin, commit SHA, content digest, included/excluded/failed paths, extractor/config versions, and artifact hashes.
-2. **Submodules and LFS:** Apply explicit submodule and LFS policies with completeness accounting.
-3. **Publication lifecycle:** Keep `complete`, `partial`, `blocked`, and `failed` states distinct; stage and validate new graphs before atomic publication while retaining the last known good snapshot.
-4. **Query contract:** Return symbols, relationships, and source ranges with snapshot identity, coverage, ambiguity, and freshness metadata.
-
-## Librarian business knowledge & cross-product links
-
-Librarian models capabilities, requirements/business rules, processes, domain
-concepts/data definitions, roles, systems/integrations, and decisions using
-stable project-scoped IDs, source passage locators/versions, temporal
-applicability, evidentiary basis, and review/correction state.
-
-Cross-product associations (`librarian#923h`) link a Librarian assertion to a
-Knowitall `repository/snapshot/symbol` identity with explicit evidence,
-disposition, and reassessment when either the business source or code revision
-changes.
-
-## Shared document intake pipeline (Librarian)
-
-```text
-discover or submit -> private staging -> retain/register original
-  -> format-routed normalization -> quality/knowledge processing
-  -> policy qualification -> selected retrieval publication
-```
-
-## Delivery backlog (`kata list --project the_knowitall`)
-
-Provider design is tracked under `the_knowitall#vky6` with implementation slices:
-
-| Kata | Scope |
-| --- | --- |
-| `the_knowitall#7gv8` | Repository intake and immutable snapshots |
-| `the_knowitall#r9gz` | Pinned Graphify integration |
-| `the_knowitall#8jvw` | Revision-bound queries and evidence packets |
-| `the_knowitall#regc` | Resumable updates and atomic publication |
-| `the_knowitall#axsf` | Optional SPUD technical-artifact admission |
-
-Connected Librarian and Engineer slices (`engi-platform#pyzt`):
-
-| Kata | Scope |
-| --- | --- |
-| `librarian#zqdh` | Qualified retrieval of selected Docling renditions |
-| `librarian#1md4` | Durable intake stages, DLQ, and replay |
-| `librarian#rst9` | Retained-export importer (`librarian#55nx` receiving design) |
-| `librarian#bj17` / `5bc5` | Confluence / Jira exporter integration and reconciliation |
-| `librarian#3sx1` / `9hqs` | Drive discovery and manual/local-drop intake |
-| `librarian#8a5h` / `0nj8` | UTF-8 normalization and standing-policy qualification |
-| `librarian#rjr5` | Contribution/disposition transport |
-| `librarian#pwhw` -> `xzkj` | Business entity/relationship contract -> first slice |
-| `engi-platform#ca6n` -> `hk33` | Shared synthetic fixtures -> end-to-end 3-product demo harness |
-| `engi-platform#k4mp` | Task-bound Librarian + Knowitall evidence composition |
-| `engi-platform#zbww` -> `pbqn` | Memory value benchmark -> conditional memory integration |
-
-Target end-to-end demonstration (`engi-platform#hk33`):
-`source passage -> business rule/entity -> evidence-linked code symbol -> affected dependency -> Engineer change/review`, including interrupted-run recovery and source-update reassessment in isolated temporary fixture stores.
-
-## Provider Contract (`knowitall.code-context/v1`)
-
-`knowitall.code-context/v1` defines the engine-neutral provider/consumer boundary:
-
-| Path | Contents |
-| --- | --- |
-| `schemas/knowitall.code-context/v1/` | JSON Schemas for the snapshot manifest, query request, query response, and shared definitions |
-| `examples/knowitall.code-context/v1/` | Schema-valid manifest, exact request, success response, and partial response |
-| `src/knowitall_contract/` | Typed records and validation APIs loaded via `importlib.resources` |
-
-Every response binds project, repository, snapshot, commit (or admitted dirty-content) identity, graph generation, and raw-artifact digest (`current` is accepted only as a request selector). Queries support `symbol`, `dependencies`, `path`, and `source_range` with explicit status (`ok`, `partial`, `not_found`, `ambiguous`, `stale`, `unavailable`, `invalid_request`), machine-readable missing-evidence records, and cursor-based continuations.
-
-## Local Provider Usage
-
-Extraction uses `graphifyy==0.9.96` pinned by hash (see [`docs/graphify-dependency.md`](docs/graphify-dependency.md) and [`docs/local-provider.md`](docs/local-provider.md)).
+Requirements: Linux x86_64, Python 3.12+ for the library, Python 3.14 for the
+Graphify runtime, and `python3-venv`. The wheel-build test needs `ensurepip`.
 
 ```sh
-export PYTHONPATH="/absolute/path/to/test-dependencies:$PWD/src"
-export KNOWITALL_GRAPHIFY_RUNTIME="/absolute/path/to/pinned-graphify-venv"
-python3 scripts/check-contract-examples.py
-python3 -m pytest -q
+cd ~/the_knowitall
+python3 -m venv --without-pip .venv
+python3 -m pip --python .venv/bin/python install -e '.[test]'
+
+# Graphify runtime. Packages are installed from requirements/graphify.lock and hash-checked.
+python3.14 -m venv --without-pip .local/graphify-venv
+python3 -m pip --python .local/graphify-venv/bin/python install \
+  --require-hashes --no-deps -r requirements/graphify.lock
+export KNOWITALL_GRAPHIFY_RUNTIME="$PWD/.local/graphify-venv"
+
+# Verify the setup.
+.venv/bin/python scripts/check-contract-examples.py
+.venv/bin/python -m pytest -q
 ```
 
+If `KNOWITALL_GRAPHIFY_RUNTIME` is unset, the tests that run real Graphify are
+skipped.
 
-## Optional SPUD technical-artifact admission
+## Adding a repository (building the graph)
 
-`knowitall_spud` admits an already produced SPUD bundle as graded, queryable
-evidence in a separate `knowitall.spud-artifacts/v1` envelope, without adopting
-SPUD's pipeline. See
-[`docs/spud-artifact-admission.md`](docs/spud-artifact-admission.md) for the
-descriptor format, supported layouts, evidence grades, revision-binding values,
-limitation reasons and query kinds.
+Give The Knowitall a repository URL (`https://` or `ssh://`) or a local Git path.
+Put the following script in `.local/ingest.py`. Git ignores `.local/`.
 
-| Path | Contents |
-| --- | --- |
-| `schemas/knowitall.spud-artifacts/v1/` | JSON Schemas for the artifact query request and response |
-| `examples/knowitall.spud-artifacts/v1/` | Schema-valid relationship request, success response and partial citation response |
-| `src/knowitall_spud/` | Descriptor validation, artifact retention, record normalization, admission store and query service |
+```python
+import os, sys
+from pathlib import Path
+from knowitall_snapshot import SnapshotPolicy, checkout_remote, create_snapshot
+from knowitall_graphify import GraphifyConfig, executable_digest
+from knowitall_publication import PublicationStore
+from knowitall_updates import UpdateLedger, UpdateRunner
 
-Admission reads retained files only: it never runs SPUD or Graphify, extracts an
-archive, opens a socket or a subprocess, or executes anything from a bundle.
-Missing companions, unknown producer versions, skipped uploads and unverified
-commit bindings stay explicit limitations, so admitting a bundle never claims
-SPUD ran locally, that the bundle is current, or that source scope was complete.
+origin, project_id, repo_id = sys.argv[1:4]
+state = Path(".local").resolve()
+runtime = Path(os.environ["KNOWITALL_GRAPHIFY_RUNTIME"])
+python = runtime / "bin/python"
+config = GraphifyConfig(executable=python, python_path=str(runtime / "lib/python3.14/site-packages"),
+                        expected_executable_digest=executable_digest(python))
 
-## Resumable local updates
+checkout = checkout_remote(origin, state / "repos" / repo_id)
+snapshot = create_snapshot(checkout.path, project_id, repo_id, state / "snapshots", SnapshotPolicy(), origin=checkout.origin)
+store = PublicationStore(state / "publication")
+ledger = UpdateLedger(state / "updates", store)
+runner = UpdateRunner(ledger, config)
+request_id = f"{repo_id}-{snapshot.snapshot_id}"
+if not ledger.request_path(request_id).exists():
+    try:
+        current = store.resolve_current(project_id, repo_id)
+    except KeyError:
+        current = None
+    runner.submit(request_id, snapshot, expected_current=current)
+status = runner.resume(request_id)
+print(status.phase, status.reasons or "", f"snapshot={snapshot.snapshot_id}")
+```
 
-`knowitall_updates.UpdateLedger` durably captures admitted snapshot bytes and
-request/runtime identities before acknowledgment. `UpdateRunner.submit` and
-`resume` use Graphify's pinned incremental engine and validated graph/manifest
-checkpoints, then publish only against the explicitly saved predecessor.
-`inspect` exposes progress and failure reasons; retrying a published request
-returns its original receipt without rolling newer `current` evidence backward.
-See [the local API and recovery example](docs/local-provider.md#resumable-updates).
+```sh
+.venv/bin/python .local/ingest.py https://github.com/ORG/REPO.git my-project my-repo
+```
 
-Operations are serialized on one local POSIX store; keep one ledger per store.
-Incomplete inventories block rather than delete unknown survivors. Valid partial
-graphs remain queryable with their actual revision and limitations. The private
-ledger retains source bytes and graph companions, so keep it outside Git and
-apply an explicit retention policy. No scheduler or network service is added.
+- **Credentials:** URLs with embedded credentials are rejected, and Git
+  credential helpers are disabled. The script can clone public repos and local
+  paths. For a private repo, clone it yourself first and pass the local path.
+- **Refresh:** re-run the script. It fetches the latest commit and updates the
+  graph incrementally. The earlier graph stays available.
+- **Resume:** if a run is interrupted, re-run the same command. The run's
+  progress is saved in `.local/updates`.
+- **Commits:** only committed content is indexed. A checkout with uncommitted
+  changes is rejected.
+
+## Connecting consumer agents
+
+There is **no MCP server yet** (Kata `vz6q`). Until it exists, agents connect
+through a local stdio process. The process reads one JSON request per line and
+writes one JSON response per line. Put the following script in `.local/serve.py`:
+
+```python
+import sys
+from pathlib import Path
+from knowitall_publication import PublicationStore
+from knowitall_query import QueryService, serve_stdio
+
+serve_stdio(QueryService(PublicationStore(Path(".local/publication").resolve())), sys.stdin, sys.stdout)
+```
+
+```sh
+echo '{"contract":"knowitall.code-context/v1","request_id":"1","project_id":"my-project",
+"repository_id":"my-repo","selector":{"mode":"current"},
+"query":{"kind":"symbol","name":"submit_order()","match":"exact"}}' | tr -d '\n' \
+  | .venv/bin/python .local/serve.py
+```
+
+Request and response formats are defined in
+[`schemas/knowitall.code-context/v1/`](schemas/knowitall.code-context/v1/), with
+examples in [`examples/`](examples/knowitall.code-context/v1/). Graphify writes
+function names with `()`. Statuses such as `partial`, `stale`, or `not_found`
+and the `missing_evidence` field are part of the answer, so agents must not
+discard them.
+
+When an MCP adapter exists, it will wrap the same request and response format.
+Agents will then register it in Pi's `mcp.json` with the same pattern as
+The Librarian.
+
+## Importing SPUD artifacts (optional)
+
+`knowitall_spud` admits an already produced SPUD bundle (`graph.json`, reports,
+OKF/run manifests, citation indexes) as graded, queryable evidence under its own
+`knowitall.spud-artifacts/v1` contract. It does not adopt SPUD's pipeline: it
+only reads retained files, and never runs SPUD or Graphify, extracts an archive,
+opens a socket or subprocess, or executes anything from a bundle.
+
+```python
+import json
+from pathlib import Path
+from knowitall_spud import (
+    AdmissionStore, ArtifactQueryService, BundleLimits,
+    load_descriptor, normalize_bundle, read_bundle, resolve_artifacts,
+)
+
+root = Path(".local/spud-bundle").resolve()
+descriptor = load_descriptor(json.loads((root / "admission.json").read_text(encoding="utf-8")))
+limits = BundleLimits()
+selected, limitations = resolve_artifacts(root, descriptor, limits)
+retained = read_bundle(root, selected, limits, descriptor.expected_digests)
+
+store = AdmissionStore(Path(".local/spud-admission").resolve())
+receipt = store.admit(normalize_bundle(descriptor, retained, limitations))
+response = ArtifactQueryService(store).execute(request)
+```
+
+Each answer names the bundle, its receipt digest and the pinned `spud-reader/v1`
+profile, and states a revision binding of `unknown`, `asserted` or `bound`.
+Missing companions, unknown producer versions, skipped uploads, unverified
+commit metadata and incomplete source scope stay explicit limitations, so an
+admitted bundle never claims SPUD ran locally, that the bundle is current, or
+that source coverage was complete. Request and response formats live in
+[`schemas/knowitall.spud-artifacts/v1/`](schemas/knowitall.spud-artifacts/v1/)
+with examples in [`examples/`](examples/knowitall.spud-artifacts/v1/); see
+[docs/spud-artifact-admission.md](docs/spud-artifact-admission.md) for the
+descriptor format, layouts, evidence grades and limitation reasons.
+
+## Rules
+
+- Keep cloned repos, snapshots, and graphs under `.local/`. Never commit them.
+- Treat ingested code as untrusted. The pipeline never runs hooks, builds, or
+  network calls while extracting.
+- Track work in Kata (`kata ready --agent`). roborev hooks review every 5 commits.
+
+## Open work
+
+| Kata | Priority | Scope |
+| --- | --- | --- |
+| `88nk` | `P1` | Handling of unresolved references (**blocks real repos**) |
+| `vz6q` | `P1` | MCP server for consumer agents |
+| `3p2d` | `P1` | Isolated MVP instance intake and publication across mirrored Falcon repos |
+| `d2qt` | `P3` | Runtime integrity attestation |
+
+More detail: [docs/local-provider.md](docs/local-provider.md) and
+[docs/graphify-dependency.md](docs/graphify-dependency.md).
