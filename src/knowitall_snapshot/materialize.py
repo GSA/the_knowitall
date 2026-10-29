@@ -84,6 +84,20 @@ def _dirty_fingerprint(repo: Path, paths: set[str]) -> tuple[tuple[str, str], ..
     return tuple(values)
 
 
+def _admitted_dirty_paths(repo: Path, policy: SnapshotPolicy, tracked: set[str], untracked: set[str]) -> set[str]:
+    admitted = set()
+    if policy.tracked_changes == "include":
+        admitted.update(path for path in tracked if (repo / path).is_file() and not (repo / path).is_symlink())
+    if policy.untracked_files == "include":
+        for path in untracked:
+            target = repo / path
+            parts = path.split("/")
+            nested = any((repo / "/".join(parts[:index]) / ".git").exists() for index in range(1, len(parts) + 1))
+            if target.is_file() and not target.is_symlink() and not nested:
+                admitted.add(path)
+    return admitted
+
+
 def _dirty_inventory(repo: Path, included: tuple[InventoryEntry, ...], excluded: tuple[dict[str, str], ...], policy: SnapshotPolicy, tracked: set[str], untracked: set[str]):
     entries = {entry.path: entry for entry in included}
     exclusions = list(excluded)
@@ -124,9 +138,10 @@ def create_snapshot(repo: Path, project_id: str, repository_id: str, destination
     initial_status = status_entries(repo)
     tracked, untracked = _status(repo)
     dirty = bool(tracked or untracked)
-    dirty_fingerprint = _dirty_fingerprint(repo, tracked | untracked)
     if dirty and policy.dirty != "admit":
         raise ValueError("dirty Git input rejected by policy")
+    admitted_dirty_paths = _admitted_dirty_paths(repo, policy, tracked, untracked)
+    dirty_fingerprint = _dirty_fingerprint(repo, admitted_dirty_paths)
     commit_oid = commit.split(":", 1)[1]
     try:
         included, excluded = clean_inventory(repo, commit_oid)
@@ -145,7 +160,7 @@ def create_snapshot(repo: Path, project_id: str, repository_id: str, destination
     if (
         commit_identity(repo) != commit
         or status_entries(repo) != initial_status
-        or _dirty_fingerprint(repo, tracked | untracked) != dirty_fingerprint
+        or _dirty_fingerprint(repo, admitted_dirty_paths) != dirty_fingerprint
     ):
         raise ValueError("repository changed during snapshot")
     content_bytes = b"".join(entry.path.encode() + b"\0" + entry.mode.encode() + b"\0" + entry.content_digest.encode() + b"\0" for entry in included)
@@ -172,7 +187,7 @@ def create_snapshot(repo: Path, project_id: str, repository_id: str, destination
         if (
             commit_identity(repo) != commit
             or status_entries(repo) != initial_status
-            or _dirty_fingerprint(repo, tracked | untracked) != dirty_fingerprint
+            or _dirty_fingerprint(repo, admitted_dirty_paths) != dirty_fingerprint
         ):
             raise ValueError("repository changed during snapshot")
         os.replace(temporary, target)

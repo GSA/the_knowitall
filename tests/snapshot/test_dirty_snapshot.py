@@ -96,6 +96,24 @@ def test_admitted_rename_removes_old_path_and_captures_new_path(make_repo, tmp_p
     assert "src/persistence.py" in paths
 
 
+def test_excluded_untracked_file_contents_are_not_read(make_repo, tmp_path, monkeypatch):
+    repo = make_repo()
+    excluded = repo / "unreadable.bin"
+    excluded.write_bytes(b"excluded")
+    original_read_bytes = type(excluded).read_bytes
+
+    def guarded_read_bytes(path):
+        if path == excluded:
+            raise PermissionError("excluded file must not be read")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(type(excluded), "read_bytes", guarded_read_bytes)
+
+    snapshot = create_snapshot(repo, "project", "repo", tmp_path / "out", SnapshotPolicy(dirty="admit"))
+
+    assert {"path": "unreadable.bin", "reason": "dirty_untracked_excluded"} in snapshot.excluded
+
+
 def test_dirty_policy_records_excluded_working_changes(make_repo, tmp_path):
     repo = make_repo()
     (repo / "src" / "orders.py").write_text("changed = True\n", encoding="utf-8")
