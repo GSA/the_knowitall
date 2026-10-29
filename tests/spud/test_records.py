@@ -507,3 +507,11 @@ def test_binding_is_not_bound_when_a_second_graph_was_never_verified(make_bundle
     assert bundle.revision_binding == "asserted"
     assert bundle.bound_snapshot is None
     assert (GRAPH_PATH, "ambiguous_bound_graph") in bundle.limitations
+
+
+@pytest.mark.parametrize("supplied_coverage", [["complete"], {"value": "complete"}, 1, None])
+def test_unusable_supplied_coverage_stays_unknown(make_bundle, supplied_coverage):
+    bundle = bound_bundle(make_bundle, binding_extra={"source_coverage": supplied_coverage})
+
+    assert bundle.revision_binding == "bound"
+    assert bundle.source_coverage == "unknown"
