@@ -83,7 +83,7 @@ Grades record *how* evidence was produced and are never promoted.
 | `recorded_artifact` | `graph_symbol`, `graph_relationship` | Graphify graph nodes and edges, with the producer's own `_origin`/`confidence` attribution |
 | `recorded_citation` | `citation_entry` | SPUD's flat citation index; `relation` is always `null`, so a citation never becomes a relationship |
 | `generated_narrative` | `narrative_passage` | Graph report and article text, inert, with half-open `[start_line, end_line)` locators |
-| `retained_provenance` | `provenance_assertion` | OKF and run-manifest fields, retained as asserted, not verified, with half-open `[start_line, end_line)` locators; scalars the flat reader cannot represent faithfully, including double-quoted escape syntax, are skipped rather than altered |
+| `retained_provenance` | `provenance_assertion` | OKF and run-manifest fields, retained as asserted, not verified, with half-open `[start_line, end_line)` locators; scalars the flat reader cannot represent faithfully, including double-quoted escape syntax and multiline plain scalars, are skipped rather than altered |
 
 Every record carries a `locator` naming the artifact path, its content digest
 and either a JSON pointer or a line range, so any answer can be traced back to

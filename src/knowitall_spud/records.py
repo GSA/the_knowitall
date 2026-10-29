@@ -234,7 +234,13 @@ def read_flat_yaml_spans(data: bytes) -> dict[str, tuple[str, int, int]]:
         value = value.strip()
         if value:
             scalar = _scalar(value)
-            if scalar is None:
+            probe = index
+            while probe < len(lines) and (not lines[probe].strip() or lines[probe].lstrip().startswith("#")):
+                probe += 1
+            # An indented follower folds into this scalar; the reader cannot
+            # represent that, so the whole field is skipped rather than cut short.
+            continued = probe < len(lines) and lines[probe] != lines[probe].lstrip()
+            if scalar is None or continued:
                 continue
             fields[key] = (scalar, start_line, start_line + 1)
             continue

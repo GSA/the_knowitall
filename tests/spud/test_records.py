@@ -515,3 +515,15 @@ def test_unusable_supplied_coverage_stays_unknown(make_bundle, supplied_coverage
 
     assert bundle.revision_binding == "bound"
     assert bundle.source_coverage == "unknown"
+
+
+def test_read_flat_yaml_skips_multiline_plain_scalars():
+    data = b"title: Release\n  notes\ncommit: unknown\n  1111\nplain: kept\n"
+
+    assert read_flat_yaml(data) == {"plain": "kept"}
+
+
+def test_a_multiline_commit_scalar_is_not_an_asserted_commit(make_bundle):
+    bundle = normalize(*make_bundle(run_manifest={"commit_sha": "aaaa\n  bbbb"}))
+
+    assert bundle.revision_binding == "unknown"
