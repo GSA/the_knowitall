@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 import pytest
@@ -10,6 +11,7 @@ GRAPH_NODES = [
         "source_file": "src/orders.py",
         "source_location": "L4",
         "file_type": "python",
+        "community_name": "orders",
         "_origin": "ast",
     },
     {
@@ -18,6 +20,7 @@ GRAPH_NODES = [
         "source_file": "src/store.py",
         "source_location": "L1",
         "file_type": "python",
+        "community_name": "storage",
         "_origin": "ast",
     },
 ]
@@ -46,19 +49,46 @@ ARTICLE_TEXT = """# Structural analysis
 See [the store module](src/store.py) for the persistence boundary.
 """
 
-OKF_MANIFEST = """repository: repo-a
-project: project-a
-article_count: 1
-generator: spud
+OKF_MANIFEST = """okf_version: "0.2"
+name: repo-a-knowledge
+title: OKF Knowledge Bundle for repo-a
+repository:
+  url: unknown
+  commit: unknown
+  branch: unknown
+stats:
+  total_concepts: 1
+  domains:
+    - analysis
+tags:
+  - okf
+  - documentation
 """
 
-RUN_MANIFEST = """run_id: run-1
-commit_sha: 1111111111111111111111111111111111111111
-uploaded_files: 1
-skipped_files: 0
-"""
+RUN_MANIFEST_FIELDS = {
+    "run_id": "run-1",
+    "commit_sha": "1111111111111111111111111111111111111111",
+    "total_files_uploaded": "1",
+    "total_files_skipped": "0",
+}
+
+SUPPLIED_METADATA = {
+    "generator_version": "spud c80837a825cd412699f0431ad368e14b85ec246b",
+    "run_id": "run-1",
+}
+
+GRAPH_PATH = "graphify-out/graph.json"
+GRAPH_REPORT_PATH = "graphify-out/GRAPH_REPORT.md"
+CITATION_INDEX_PATH = "spud-out/json/analysis/inputs/graph-index.json"
+OKF_MANIFEST_PATH = "spud-out/manifest.yaml"
+RUN_MANIFEST_PATH = "run-manifest.yaml"
+SOURCE_EVIDENCE_PATH = "source-evidence/content-manifest.json"
 
 ARTICLE_ROOTS = {"current": "spud-out/markdown", "legacy": "spud-out"}
+
+
+def digest_of(path):
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def graph_index_from_nodes(nodes):
@@ -68,11 +98,15 @@ def graph_index_from_nodes(nodes):
             "norm_label": node["label"].lower().replace(" ", ""),
             "source_file": node["source_file"],
             "source_location": node["source_location"],
-            "community_name": "",
+            "community_name": node.get("community_name", ""),
             "file_type": node["file_type"],
         }
         for node in nodes
     ]
+
+
+def flat_yaml(fields):
+    return "".join(f"{key}: {value}\n" for key, value in fields.items())
 
 
 def write_file(bundle_root, relative, text):
@@ -97,6 +131,7 @@ def make_bundle(tmp_path):
         articles=("analysis/structural-analysis.md",),
         okf_manifest=True,
         run_manifest=True,
+        source_evidence=None,
         supplied=None,
         source_binding=None,
         graph_override=None,
@@ -114,39 +149,43 @@ def make_bundle(tmp_path):
             payload = graph_override
             if payload is None:
                 payload = {"nodes": GRAPH_NODES, "edges": GRAPH_EDGES}
-            write_file(bundle_root, "graphify-out/graph.json", json.dumps(payload, indent=2))
-            selected.append({"role": "graph", "path": "graphify-out/graph.json"})
+            text = payload if isinstance(payload, str) else json.dumps(payload, indent=2)
+            write_file(bundle_root, GRAPH_PATH, text)
+            selected.append({"role": "graph", "path": GRAPH_PATH})
         if report:
-            write_file(bundle_root, "graphify-out/GRAPH_REPORT.md", GRAPH_REPORT)
-            selected.append({"role": "graph_report", "path": "graphify-out/GRAPH_REPORT.md"})
+            write_file(bundle_root, GRAPH_REPORT_PATH, GRAPH_REPORT)
+            selected.append({"role": "graph_report", "path": GRAPH_REPORT_PATH})
         if citation_index:
-            nodes = GRAPH_NODES if graph_override is None else graph_override.get("nodes", [])
-            write_file(
-                bundle_root,
-                "spud-out/json/analysis/inputs/graph-index.json",
-                json.dumps(graph_index_from_nodes(nodes), indent=2),
-            )
-            selected.append(
-                {"role": "citation_index", "path": "spud-out/json/analysis/inputs/graph-index.json"}
-            )
+            nodes = GRAPH_NODES
+            if isinstance(graph_override, dict):
+                nodes = graph_override.get("nodes", [])
+            write_file(bundle_root, CITATION_INDEX_PATH, json.dumps(graph_index_from_nodes(nodes), indent=2))
+            selected.append({"role": "citation_index", "path": CITATION_INDEX_PATH})
         article_root = ARTICLE_ROOTS["legacy" if layout == "legacy" else "current"]
         for article in articles:
-            relative = f"{article_root}/{article}"
-            write_file(bundle_root, relative, ARTICLE_TEXT)
+            name, body = article if isinstance(article, tuple) else (article, ARTICLE_TEXT)
+            relative = f"{article_root}/{name}"
+            write_file(bundle_root, relative, body)
             selected.append({"role": "article", "path": relative})
         if okf_manifest:
-            write_file(bundle_root, "spud-out/manifest.yaml", OKF_MANIFEST)
-            selected.append({"role": "okf_manifest", "path": "spud-out/manifest.yaml"})
+            write_file(bundle_root, OKF_MANIFEST_PATH, OKF_MANIFEST)
+            selected.append({"role": "okf_manifest", "path": OKF_MANIFEST_PATH})
         if run_manifest:
-            write_file(bundle_root, "run-manifest.yaml", RUN_MANIFEST)
-            selected.append({"role": "run_manifest", "path": "run-manifest.yaml"})
+            fields = dict(RUN_MANIFEST_FIELDS)
+            if isinstance(run_manifest, dict):
+                fields.update(run_manifest)
+            write_file(bundle_root, RUN_MANIFEST_PATH, flat_yaml(fields))
+            selected.append({"role": "run_manifest", "path": RUN_MANIFEST_PATH})
+        if source_evidence is not None:
+            write_file(bundle_root, SOURCE_EVIDENCE_PATH, json.dumps(source_evidence, indent=2))
+            selected.append({"role": "source_evidence", "path": SOURCE_EVIDENCE_PATH})
 
         descriptor_value = {
             "descriptor_version": "knowitall.spud-admission/v1",
             "project_id": project,
             "repository_id": repository,
             "bundle_id": bundle_id,
-            "supplied": dict(supplied or {}),
+            "supplied": dict(SUPPLIED_METADATA if supplied is None else supplied),
             "expected_digests": {},
             "declared_missing": [],
         }

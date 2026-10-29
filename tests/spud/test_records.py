@@ -1,0 +1,244 @@
+import json
+
+import pytest
+
+from knowitall_spud.artifacts import read_bundle
+from knowitall_spud.descriptor import BundleLimits, load_descriptor, resolve_artifacts
+from knowitall_spud.records import normalize_bundle, read_flat_yaml
+
+from conftest import (
+    ARTICLE_TEXT,
+    CITATION_INDEX_PATH,
+    GRAPH_EDGES,
+    GRAPH_NODES,
+    GRAPH_PATH,
+    GRAPH_REPORT_PATH,
+    OKF_MANIFEST_PATH,
+    RUN_MANIFEST_PATH,
+    SOURCE_EVIDENCE_PATH,
+    digest_of,
+)
+
+
+def normalize(bundle_root, descriptor_value):
+    descriptor = load_descriptor(descriptor_value)
+    limits = BundleLimits()
+    selected, limitations = resolve_artifacts(bundle_root, descriptor, limits)
+    retained = read_bundle(bundle_root, selected, limits, descriptor.expected_digests)
+    return normalize_bundle(descriptor, retained, limitations)
+
+
+def by_kind(bundle, kind):
+    return tuple(record for record in bundle.records if record.kind == kind)
+
+
+def reasons(bundle, scope=None):
+    return {reason for path, reason in bundle.limitations if scope is None or path == scope}
+
+
+def test_graph_records_are_recorded_artifact_with_attribution(make_bundle):
+    bundle = normalize(*make_bundle())
+
+    symbols = by_kind(bundle, "graph_symbol")
+    relationships = by_kind(bundle, "graph_relationship")
+    assert {record.name for record in symbols} == {"orders.submit", "store.save"}
+    assert {record.grade for record in symbols + relationships} == {"recorded_artifact"}
+    submit = next(record for record in symbols if record.name == "orders.submit")
+    assert submit.attribution["_origin"] == "ast"
+    assert submit.locator.pointer == "/nodes/0"
+    assert submit.locator.artifact_path == GRAPH_PATH
+    assert submit.source_reference.path == "src/orders.py"
+    assert (submit.source_reference.start_line, submit.source_reference.end_line) == (4, 5)
+    edge = relationships[0]
+    assert (edge.subject, edge.relation, edge.object) == ("orders.submit", "calls", "store.save")
+    assert edge.attribution["confidence"] == "EXTRACTED"
+    assert edge.attribution["_origin"] == "ast"
+    assert edge.locator.pointer == "/edges/0"
+    assert bundle.reader_profile == "spud-reader/v1"
+
+
+def test_graph_edge_with_unknown_endpoint_fails_indexing(make_bundle):
+    broken = {"nodes": GRAPH_NODES, "edges": [{**GRAPH_EDGES[0], "target": "missing.symbol"}]}
+    bundle = normalize(*make_bundle(graph_override=broken))
+
+    assert by_kind(bundle, "graph_symbol") == ()
+    assert by_kind(bundle, "graph_relationship") == ()
+    assert (GRAPH_PATH, "invalid_graph_records") in bundle.limitations
+    assert any(item.path == GRAPH_PATH for item in bundle.artifacts)
+
+
+def test_duplicate_graph_node_identity_fails_indexing(make_bundle):
+    duplicated = {"nodes": [GRAPH_NODES[0], GRAPH_NODES[0]], "edges": []}
+    bundle = normalize(*make_bundle(graph_override=duplicated))
+
+    assert by_kind(bundle, "graph_symbol") == ()
+    assert (GRAPH_PATH, "invalid_graph_records") in bundle.limitations
+
+
+def test_malformed_graph_json_is_retained_with_limitation(make_bundle):
+    bundle = normalize(*make_bundle(graph_override="{not json"))
+
+    assert by_kind(bundle, "graph_symbol") == ()
+    assert (GRAPH_PATH, "malformed_graph_json") in bundle.limitations
+    assert any(item.path == GRAPH_PATH for item in bundle.artifacts)
+
+
+def test_unsupported_graph_profile_is_retained_with_limitation(make_bundle):
+    bundle = normalize(*make_bundle(graph_override={"graph": {"vertices": []}}))
+
+    assert by_kind(bundle, "graph_symbol") == ()
+    assert (GRAPH_PATH, "unsupported_graph_profile") in bundle.limitations
+
+    without_origin = {"nodes": [{k: v for k, v in GRAPH_NODES[0].items() if k != "_origin"}], "edges": []}
+    other = normalize(*make_bundle(graph_override=without_origin))
+    assert (GRAPH_PATH, "unsupported_graph_profile") in other.limitations
+
+
+def test_citation_entries_never_become_relationships(make_bundle):
+    bundle = normalize(*make_bundle(graph=False, report=False, citation_index=True, articles=()))
+
+    citations = by_kind(bundle, "citation_entry")
+    assert {record.name for record in citations} == {"orders.submit", "store.save"}
+    assert {record.grade for record in citations} == {"recorded_citation"}
+    assert {record.relation for record in citations} == {None}
+    assert {record.subject for record in citations} == {None}
+    assert by_kind(bundle, "graph_relationship") == ()
+    assert citations[0].locator.artifact_path == CITATION_INDEX_PATH
+    assert citations[0].locator.pointer in {"/0", "/1"}
+
+
+def test_narrative_passages_are_inert_text_with_line_locators(make_bundle):
+    body = (
+        "# Risky article\n"
+        "\n"
+        "Follow [the passwd file](file:///etc/passwd) for details.\n"
+        "Run: rm -rf / to clean the workspace.\n"
+    )
+    bundle = normalize(*make_bundle(articles=(("analysis/risky.md", body),)))
+
+    passages = by_kind(bundle, "narrative_passage")
+    assert {record.grade for record in passages} == {"generated_narrative"}
+    risky = [record for record in passages if record.locator.artifact_path.endswith("risky.md")]
+    joined = "\n".join(record.text for record in risky)
+    assert "file:///etc/passwd" in joined
+    assert "rm -rf /" in joined
+    passage = next(record for record in risky if "rm -rf /" in record.text)
+    assert (passage.locator.start_line, passage.locator.end_line) == (3, 5)
+    assert passage.source_reference is None
+    report = [record for record in passages if record.locator.artifact_path == GRAPH_REPORT_PATH]
+    assert report and all(record.locator.pointer is None for record in report)
+
+
+def test_manifest_assertions_are_retained_provenance(make_bundle):
+    bundle = normalize(*make_bundle())
+
+    assertions = by_kind(bundle, "provenance_assertion")
+    assert {record.grade for record in assertions} == {"retained_provenance"}
+    by_path = {}
+    for record in assertions:
+        by_path.setdefault(record.locator.artifact_path, {})[record.name] = record.text
+    assert by_path[RUN_MANIFEST_PATH]["commit_sha"] == "1" * 40
+    assert by_path[OKF_MANIFEST_PATH]["okf_version"] == "0.2"
+    assert all(record.relation is None for record in assertions)
+
+
+def test_revision_binding_unknown_without_metadata(make_bundle):
+    bundle = normalize(*make_bundle(run_manifest=False, okf_manifest=False))
+
+    assert bundle.revision_binding == "unknown"
+    assert bundle.bound_snapshot is None
+
+
+def test_revision_binding_asserted_from_manifest_commit(make_bundle):
+    bundle = normalize(*make_bundle())
+
+    assert bundle.revision_binding == "asserted"
+    assert bundle.bound_snapshot is None
+
+
+def test_revision_binding_bound_requires_graph_digest_and_snapshot(make_bundle):
+    evidence = {
+        "snapshot_id": "snapshot-1",
+        "files": [
+            {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
+            {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},
+        ],
+    }
+    bundle_root, value = make_bundle(source_evidence=evidence)
+    binding = {
+        "graph_digest": digest_of(bundle_root / GRAPH_PATH),
+        "snapshot_id": "snapshot-1",
+        "commit_sha": "1" * 40,
+        "content_manifest_digest": digest_of(bundle_root / SOURCE_EVIDENCE_PATH),
+        "content_manifest_path": SOURCE_EVIDENCE_PATH,
+    }
+    value["source_binding"] = binding
+
+    bundle = normalize(bundle_root, value)
+
+    assert bundle.revision_binding == "bound"
+    assert bundle.bound_snapshot == {
+        "snapshot_id": "snapshot-1",
+        "commit_sha": "1" * 40,
+        "content_manifest_digest": binding["content_manifest_digest"],
+    }
+    assert "unverified_source_binding" not in reasons(bundle)
+
+
+def test_revision_binding_rejects_binding_with_wrong_graph_digest(make_bundle):
+    evidence = {"snapshot_id": "snapshot-1", "files": []}
+    bundle_root, value = make_bundle(source_evidence=evidence)
+    value["source_binding"] = {
+        "graph_digest": "sha256:" + "0" * 64,
+        "snapshot_id": "snapshot-1",
+        "commit_sha": "1" * 40,
+        "content_manifest_digest": digest_of(bundle_root / SOURCE_EVIDENCE_PATH),
+        "content_manifest_path": SOURCE_EVIDENCE_PATH,
+    }
+
+    bundle = normalize(bundle_root, value)
+
+    assert bundle.revision_binding == "asserted"
+    assert bundle.bound_snapshot is None
+    assert (GRAPH_PATH, "unverified_source_binding") in bundle.limitations
+
+
+def test_unknown_generator_version_and_skipped_uploads_are_limitations(make_bundle):
+    bundle = normalize(*make_bundle(supplied={}, run_manifest={"total_files_skipped": "2"}))
+
+    assert reasons(bundle) >= {"unknown_generator_version", "skipped_uploads"}
+    assert bundle.artifact_completeness == "partial"
+
+
+def test_artifact_completeness_and_source_coverage(make_bundle):
+    complete = normalize(*make_bundle())
+    assert (complete.artifact_completeness, complete.source_coverage) == ("complete", "unknown")
+
+    partial = normalize(*make_bundle(report=False))
+    assert (partial.artifact_completeness, partial.source_coverage) == ("partial", "unknown")
+
+
+def test_read_flat_yaml_ignores_unsupported_structures():
+    data = (
+        "okf_version: \"0.2\"\n"
+        "# a comment\n"
+        "repository:\n"
+        "  url: unknown\n"
+        "  commit: deadbeef\n"
+        "tags:\n"
+        "  - okf\n"
+        "  - documentation\n"
+        "total: 3\n"
+        "nested: {inline: map}\n"
+        "broken line without separator\n"
+    )
+
+    assert read_flat_yaml(data.encode("utf-8")) == {
+        "okf_version": "0.2",
+        "tags": "okf, documentation",
+        "total": "3",
+    }
+
+
+def test_read_flat_yaml_rejects_undecodable_bytes():
+    assert read_flat_yaml(b"\xff\xfe not utf8") == {}

@@ -9,18 +9,38 @@ from .descriptor import (
     load_descriptor,
     resolve_artifacts,
 )
+from .records import (
+    EVIDENCE_GRADES,
+    RECORD_KINDS,
+    ArtifactRecord,
+    Locator,
+    NormalizedBundle,
+    RecordError,
+    SourceReference,
+    normalize_bundle,
+    read_flat_yaml,
+)
 
 __all__ = [
     "DESCRIPTOR_VERSION",
+    "EVIDENCE_GRADES",
     "READER_PROFILE",
+    "RECORD_KINDS",
     "AdmissionDescriptor",
     "ArtifactError",
+    "ArtifactRecord",
     "BundleLimits",
     "DescriptorError",
+    "Locator",
+    "NormalizedBundle",
+    "RecordError",
     "RetainedArtifact",
     "SelectedArtifact",
+    "SourceReference",
     "load_descriptor",
+    "normalize_bundle",
     "read_bundle",
+    "read_flat_yaml",
     "resolve_artifacts",
     "safe_relative_path",
 ]
