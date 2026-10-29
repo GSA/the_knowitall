@@ -16,7 +16,7 @@ class InventoryEntry:
 def safe_path(value: str) -> PurePosixPath:
     raw_parts = value.split("/")
     path = PurePosixPath(value)
-    if path.is_absolute() or not raw_parts or any(part in {"", ".", ".."} for part in raw_parts):
+    if path.is_absolute() or not raw_parts or any(part in {"", ".", ".."} or part.casefold() == ".git" for part in raw_parts):
         raise ValueError(f"unsafe repository path: {value!r}")
     return path
 

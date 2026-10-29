@@ -58,7 +58,14 @@ def _remote_object_format(origin: str) -> str:
         "GIT_CONFIG_SYSTEM": os.devnull,
         "GIT_TERMINAL_PROMPT": "0",
     }
-    result = subprocess.run(["git", "ls-remote", origin, "HEAD"], env=env, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["git", "-c", "core.hooksPath=/dev/null", "-c", "credential.helper=", "ls-remote", origin, "HEAD"],
+        cwd=Path(os.path.abspath(os.sep)),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     if result.returncode:
         raise GitError(f"git ls-remote failed: {result.stderr.strip()}")
     object_id = result.stdout.split(maxsplit=1)[0]

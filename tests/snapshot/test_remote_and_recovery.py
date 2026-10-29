@@ -1,6 +1,8 @@
 import os
 import shutil
 import subprocess
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
@@ -115,6 +117,39 @@ def test_acquired_non_utf8_symlink_can_be_snapshotted_with_default_policy(make_r
 
     assert os.readlink(os.fsencode(checkout.path / "raw-link")) == b"non-utf8-\xff"
     assert any(item["path"] == "raw-link" and item["reason"] == "symlink_excluded" for item in snapshot.excluded)
+
+
+def test_remote_discovery_never_invokes_checkout_credential_helper(make_repo, tmp_path, monkeypatch):
+    current = make_repo()
+    marker = tmp_path / "credential-helper-ran"
+    helper = tmp_path / "helper.sh"
+    helper.write_text(f"#!/bin/sh\ntouch {marker}\n", encoding="utf-8")
+    helper.chmod(0o755)
+    git(current, "config", "credential.helper", str(helper))
+
+    class AuthRequired(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="test"')
+            self.end_headers()
+
+        def log_message(self, *_args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), AuthRequired)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    git(current, "config", f"url.http://127.0.0.1:{server.server_port}/.insteadOf", "https://credential-test.invalid/")
+    monkeypatch.chdir(current)
+    try:
+        with pytest.raises(Exception):
+            acquire_remote("https://credential-test.invalid/repo.git", tmp_path / "checkout")
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    assert not marker.exists()
 
 
 def test_remote_intake_rejects_credential_bearing_origins(tmp_path):

@@ -9,7 +9,7 @@ from knowitall_snapshot.inventory import safe_path
 from conftest import git
 
 
-@pytest.mark.parametrize("path", ["/absolute.py", "src/../escape.py", "src//empty.py"])
+@pytest.mark.parametrize("path", ["/absolute.py", "src/../escape.py", "src//empty.py", ".git/config", "src/.git/config"])
 def test_unsafe_inventory_paths_are_rejected(path):
     with pytest.raises(ValueError, match="unsafe repository path"):
         safe_path(path)
