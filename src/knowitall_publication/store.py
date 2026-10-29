@@ -218,9 +218,11 @@ class PublicationStore:
                     existing = _read_generation(destination)
                     if existing != generation:
                         raise PublicationConflict("generation identity raced with different published bytes")
-                _fsync_directory(self.root / "generations")
             finally:
                 shutil.rmtree(temporary, ignore_errors=True)
+        # An existing destination may be a rename left by an interrupted publisher.
+        # Persist it before selecting or acknowledging the generation on retry too.
+        _fsync_directory(self.root / "generations")
         if failpoint == "before_current_replace":
             raise PublicationInterrupted(failpoint)
         reference = _generation_ref(generation)
