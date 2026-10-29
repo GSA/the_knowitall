@@ -6,7 +6,9 @@ extracts an archive, or interprets artifact content as instructions.
 
 from __future__ import annotations
 
+import errno
 import hashlib
+import os
 import re
 import stat
 from collections.abc import Mapping, Sequence
@@ -60,25 +62,54 @@ def safe_relative_path(value: str) -> str:
     return str(path)
 
 
-def _regular_file(bundle_root: Path, relative: str) -> Path:
+def verify_regular_directories(bundle_root: Path, relative: str) -> Path:
+    """Reject a symlinked bundle root or any symlinked parent of `relative`."""
     current = bundle_root
     if current.is_symlink():
         raise ArtifactError(f"bundle root is not a regular directory: {relative!r}")
-    parts = relative.split("/")
-    for part in parts[:-1]:
+    for part in relative.split("/")[:-1]:
         current = current / part
         if current.is_symlink() or not current.is_dir():
             raise ArtifactError(f"bundle artifact is not a regular file: {relative!r}")
-    target = current / parts[-1]
-    if target.is_symlink():
-        raise ArtifactError(f"bundle artifact is not a regular file: {relative!r}")
+    return current
+
+
+def read_regular_file(bundle_root: Path, relative: str, max_bytes: int) -> bytes:
+    """Read one bundle artifact through a single non-following descriptor.
+
+    The descriptor is opened with `O_NOFOLLOW | O_NONBLOCK` and verified with
+    `fstat`, so the bytes returned are the bytes of the file that was checked:
+    an entry swapped for a symlink or a FIFO after the check cannot be read,
+    and the read itself stops above `max_bytes` rather than trusting a size
+    sampled before the read.
+    """
+    directory = verify_regular_directories(bundle_root, relative)
+    target = directory / relative.split("/")[-1]
     try:
-        mode = target.lstat().st_mode
+        descriptor = os.open(target, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+    except OSError as error:
+        if error.errno in {errno.ELOOP, errno.EMLINK, errno.ENXIO, errno.EWOULDBLOCK, errno.EAGAIN}:
+            raise ArtifactError(f"bundle artifact is not a regular file: {relative!r}") from error
+        raise ArtifactError(f"bundle artifact is unreadable: {relative!r}") from error
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            raise ArtifactError(f"bundle artifact is not a regular file: {relative!r}")
+        if info.st_size > max_bytes:
+            raise ArtifactError(
+                f"artifact {relative!r} of {info.st_size} bytes exceeds per-artifact limit {max_bytes}"
+            )
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            data = stream.read(max_bytes + 1)
     except OSError as error:
         raise ArtifactError(f"bundle artifact is unreadable: {relative!r}") from error
-    if not stat.S_ISREG(mode):
-        raise ArtifactError(f"bundle artifact is not a regular file: {relative!r}")
-    return target
+    finally:
+        os.close(descriptor)
+    if len(data) > max_bytes:
+        raise ArtifactError(f"artifact {relative!r} exceeds per-artifact limit {max_bytes}")
+    if len(data) != info.st_size:
+        raise ArtifactError(f"artifact {relative!r} changed size while being read")
+    return data
 
 
 def read_bundle(
@@ -101,23 +132,18 @@ def read_bundle(
         if relative in seen:
             raise ArtifactError(f"bundle artifact selected twice: {relative!r}")
         seen.add(relative)
-        target = _regular_file(bundle_root, relative)
-        size = target.lstat().st_size
-        if size > limits.max_artifact_bytes:
-            raise ArtifactError(
-                f"artifact {relative!r} of {size} bytes exceeds per-artifact limit {limits.max_artifact_bytes}"
-            )
-        total += size
+        data = read_regular_file(bundle_root, relative, limits.max_artifact_bytes)
+        total += len(data)
         if total > limits.max_total_bytes:
             raise ArtifactError(
                 f"artifact {relative!r} brings retained bytes to {total}, which exceeds bundle limit {limits.max_total_bytes}"
             )
-        data = target.read_bytes()
-        if len(data) != size:
-            raise ArtifactError(f"artifact {relative!r} changed size while being read")
         digest = content_digest(data)
         expected = expected_digests.get(relative)
         if expected is not None and expected != digest:
             raise ArtifactError(f"artifact {relative!r} digest mismatch: expected {expected}, retained {digest}")
         retained.append(RetainedArtifact(item.role, relative, digest, data))
+    unsatisfied = sorted(set(expected_digests) - seen)
+    if unsatisfied:
+        raise ArtifactError(f"expected digest named an artifact that was not selected: {unsatisfied}")
     return tuple(retained)
