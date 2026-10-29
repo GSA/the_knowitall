@@ -1,10 +1,11 @@
 import hashlib
 import json
 import os
+import shutil
 
 import pytest
 
-from knowitall_spud.artifacts import ArtifactError, read_bundle, safe_relative_path
+from knowitall_spud.artifacts import ArtifactError, read_bundle, read_regular_file, safe_relative_path
 from knowitall_spud.descriptor import (
     BundleLimits,
     DescriptorError,
@@ -130,3 +131,68 @@ def test_read_bundle_rejects_expected_digest_mismatch(make_bundle):
 
     with pytest.raises(ArtifactError, match="digest mismatch"):
         read_bundle(root, descriptor.artifacts, BundleLimits(), expected)
+
+
+def test_read_regular_file_rejects_entry_swapped_after_the_check(monkeypatch, tmp_path):
+    target = tmp_path / "graph.json"
+    target.write_bytes(b"x" * 16)
+    outside = tmp_path / "outside.json"
+    outside.write_bytes(b"y" * 16)
+    real_open = os.open
+
+    def swapping(path, flags, *args, **kwargs):
+        if str(path).endswith("graph.json"):
+            target.unlink()
+            target.symlink_to(outside)
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", swapping)
+
+    with pytest.raises(ArtifactError, match="not a regular file"):
+        read_regular_file(tmp_path, "graph.json", 1024)
+
+
+def test_read_regular_file_caps_the_read_itself(tmp_path):
+    (tmp_path / "graph.json").write_bytes(b"x" * 64)
+
+    with pytest.raises(ArtifactError, match="per-artifact limit"):
+        read_regular_file(tmp_path, "graph.json", 8)
+
+
+def test_read_bundle_rejects_unsatisfied_expected_digest(make_bundle):
+    root, value = make_bundle(layout="explicit")
+    descriptor = load_descriptor(value)
+    expected = {"graphify-out/renamed-graph.json": "sha256:" + "0" * 64}
+
+    with pytest.raises(ArtifactError, match="was not selected"):
+        read_bundle(root, descriptor.artifacts, BundleLimits(), expected)
+
+
+def test_resolve_artifacts_ignores_a_symlinked_intermediate_directory(tmp_path, make_bundle):
+    root, value = make_bundle(layout="current")
+    outside = tmp_path / "outside"
+    (outside / "markdown").mkdir(parents=True)
+    (outside / "markdown" / "leaked.md").write_text("# Leaked\n", encoding="utf-8")
+    (outside / "manifest.yaml").write_text("okf_version: \"0.2\"\n", encoding="utf-8")
+    shutil.rmtree(root / "spud-out")
+    (root / "spud-out").symlink_to(outside, target_is_directory=True)
+
+    selected, limitations = resolve_artifacts(root, load_descriptor(value), BundleLimits())
+
+    assert [item.path for item in selected if item.role == "article"] == []
+    assert all("leaked.md" not in item.path for item in selected)
+    assert all(item.role != "okf_manifest" for item in selected)
+    assert ("spud-out", "no_articles_selected") in limitations
+    assert ("spud-out/manifest.yaml", "missing_okf_manifest") in limitations
+
+
+def test_resolve_artifacts_skips_symlinked_article_files(make_bundle):
+    root, value = make_bundle(layout="current")
+    link = root / "spud-out" / "markdown" / "linked.md"
+    link.symlink_to(root / "graphify-out" / "GRAPH_REPORT.md")
+
+    selected, _limitations = resolve_artifacts(root, load_descriptor(value), BundleLimits())
+
+    assert [item.path for item in selected if item.role == "article"] == [
+        "spud-out/markdown/analysis/structural-analysis.md"
+    ]

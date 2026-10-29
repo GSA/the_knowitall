@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from .artifacts import ArtifactError, is_digest, safe_relative_path
+from .artifacts import ArtifactError, is_digest, safe_relative_path, verify_regular_directories
 
 
 DESCRIPTOR_VERSION = "knowitall.spud-admission/v1"
@@ -198,6 +198,10 @@ def load_descriptor(value: Mapping[str, object]) -> AdmissionDescriptor:
 
 def _articles(bundle_root: Path, root: str) -> tuple[str, ...]:
     base = bundle_root / root
+    try:
+        verify_regular_directories(bundle_root, root + "/leaf")
+    except ArtifactError:
+        return ()
     if not base.is_dir() or base.is_symlink():
         return ()
     found = []
@@ -205,11 +209,18 @@ def _articles(bundle_root: Path, root: str) -> tuple[str, ...]:
         relative = path.relative_to(bundle_root).as_posix()
         if any(relative.startswith(prefix) for prefix in EXCLUDED_ARTICLE_PREFIXES):
             continue
+        if not _present(bundle_root, relative):
+            continue
         found.append(relative)
     return tuple(sorted(found))
 
 
 def _present(bundle_root: Path, relative: str) -> bool:
+    """A path is present only as a regular file reached without any symlink."""
+    try:
+        verify_regular_directories(bundle_root, relative)
+    except ArtifactError:
+        return False
     path = bundle_root / relative
     return path.is_file() and not path.is_symlink()
 
