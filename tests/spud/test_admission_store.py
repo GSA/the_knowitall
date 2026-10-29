@@ -206,3 +206,39 @@ def test_recover_reports_healthy_bundles_and_removes_unreferenced_directories(tm
     assert store.recover() == ("bundle-1",)
     assert not orphan.exists()
     assert store.open_bundle("project-a", "repo-a", "bundle-1")[1].bundle_id == "bundle-1"
+
+
+def damage(store):
+    directory = next(path for path in (store.root / "bundles").iterdir() if path.is_dir())
+    (directory / "receipt.json").unlink()
+    return directory
+
+
+def test_damaged_bundles_are_reported_rather_than_silently_skipped(tmp_path, admitted_bundle):
+    store, _bundle, _receipt = admitted_bundle()
+    directory = damage(store)
+
+    assert store.recover() == ()
+    assert directory.exists()
+    assert store.damaged_bundles() == (("project-a", "repo-a", "bundle-1"),)
+
+
+def test_discarding_a_damaged_bundle_allows_re_admission(tmp_path, admitted_bundle):
+    store, bundle, receipt = admitted_bundle()
+    directory = damage(store)
+
+    store.discard_damaged("project-a", "repo-a", "bundle-1")
+
+    assert not directory.exists()
+    assert store.damaged_bundles() == ()
+    assert store.list_bundles("project-a", "repo-a") == ()
+    assert store.admit(bundle) == receipt
+
+
+def test_discard_refuses_to_remove_a_readable_bundle(tmp_path, admitted_bundle):
+    store, _bundle, _receipt = admitted_bundle()
+
+    with pytest.raises(AdmissionConflict, match="is readable"):
+        store.discard_damaged("project-a", "repo-a", "bundle-1")
+
+    assert store.list_bundles("project-a", "repo-a") == ("bundle-1",)

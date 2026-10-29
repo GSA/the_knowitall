@@ -247,6 +247,8 @@ class AdmissionStore:
         pointer = self._pointer_path(bundle.project_id, bundle.repository_id, bundle.bundle_id)
         payload = _canonical(
             {
+                "project_id": bundle.project_id,
+                "repository_id": bundle.repository_id,
                 "bundle_id": bundle.bundle_id,
                 "bundle_key": _key(bundle.project_id, bundle.repository_id, bundle.bundle_id),
             }
@@ -291,15 +293,22 @@ class AdmissionStore:
         self._publish_pointer(bundle)
         return receipt
 
-    def open_bundle(self, project_id: str, repository_id: str, bundle_id: str) -> tuple[NormalizedBundle, AdmissionReceipt]:
+    def _pointer_key(self, project_id: str, repository_id: str, bundle_id: str) -> str:
         pointer = self._pointer_path(project_id, repository_id, bundle_id)
         try:
             value = json.loads(pointer.read_bytes())
         except (OSError, json.JSONDecodeError) as error:
             raise KeyError((project_id, repository_id, bundle_id)) from error
         key = value.get("bundle_key")
-        if value.get("bundle_id") != bundle_id or not isinstance(key, str) or not _BUNDLE_KEY_PATTERN.match(key):
+        identity = (value.get("project_id"), value.get("repository_id"), value.get("bundle_id"))
+        if identity != (project_id, repository_id, bundle_id):
             raise KeyError((project_id, repository_id, bundle_id))
+        if not isinstance(key, str) or not _BUNDLE_KEY_PATTERN.match(key):
+            raise KeyError((project_id, repository_id, bundle_id))
+        return key
+
+    def open_bundle(self, project_id: str, repository_id: str, bundle_id: str) -> tuple[NormalizedBundle, AdmissionReceipt]:
+        key = self._pointer_key(project_id, repository_id, bundle_id)
         bundle, receipt = self._read(self.root / "bundles" / key)
         if (bundle.project_id, bundle.repository_id, bundle.bundle_id) != (project_id, repository_id, bundle_id):
             raise KeyError((project_id, repository_id, bundle_id))
@@ -319,6 +328,57 @@ class AdmissionStore:
                 continue
         return tuple(sorted(found))
 
+    def _pointers(self) -> tuple[tuple[tuple[str, str, str], str], ...]:
+        """Every readable index pointer as ((project, repository, bundle), bundle_key)."""
+        index_root = self.root / "index"
+        if not index_root.is_dir():
+            return ()
+        found = []
+        for index in index_root.iterdir():
+            if not index.is_dir():
+                continue
+            for pointer in index.iterdir():
+                if pointer.name.startswith("."):
+                    continue
+                try:
+                    value = json.loads(pointer.read_bytes())
+                    identity = (value["project_id"], value["repository_id"], value["bundle_id"])
+                    key = value["bundle_key"]
+                except (OSError, KeyError, json.JSONDecodeError):
+                    continue
+                if isinstance(key, str) and _BUNDLE_KEY_PATTERN.match(key):
+                    found.append((identity, key))
+        return tuple(sorted(found))
+
+    def damaged_bundles(self) -> tuple[tuple[str, str, str], ...]:
+        """Identities of referenced bundles whose retained evidence cannot be read.
+
+        Damage is reported, never repaired: an operator decides whether to
+        inspect the retained directory or discard it with `discard_damaged`.
+        """
+        damaged = []
+        for identity, key in self._pointers():
+            try:
+                self._read(self.root / "bundles" / key)
+            except (KeyError, AdmissionValidationError):
+                damaged.append(identity)
+        return tuple(sorted(damaged))
+
+    def discard_damaged(self, project_id: str, repository_id: str, bundle_id: str) -> None:
+        """Remove a damaged bundle and its pointer so the id can be re-admitted."""
+        key = self._pointer_key(project_id, repository_id, bundle_id)
+        directory = self.root / "bundles" / key
+        try:
+            self._read(directory)
+        except (KeyError, AdmissionValidationError):
+            pass
+        else:
+            raise AdmissionConflict(f"bundle {bundle_id!r} is readable and will not be discarded")
+        shutil.rmtree(directory, ignore_errors=True)
+        self._pointer_path(project_id, repository_id, bundle_id).unlink(missing_ok=True)
+        _fsync_directory(self.root / "bundles")
+        _fsync_directory(self._index_path(project_id, repository_id))
+
     def recover(self) -> tuple[str, ...]:
         bundles = self.root / "bundles"
         for temporary in bundles.glob(".admit-*"):
@@ -327,18 +387,7 @@ class AdmissionStore:
             if index.is_dir():
                 for temporary in index.glob(".pointer-*"):
                     temporary.unlink(missing_ok=True)
-        referenced = {}
-        for index in (self.root / "index").iterdir():
-            if not index.is_dir():
-                continue
-            for pointer in index.iterdir():
-                if pointer.name.startswith("."):
-                    continue
-                try:
-                    value = json.loads(pointer.read_bytes())
-                    referenced[value["bundle_key"]] = value["bundle_id"]
-                except (OSError, KeyError, json.JSONDecodeError):
-                    continue
+        referenced = {key: identity[2] for identity, key in self._pointers()}
         recovered = set()
         for directory in bundles.iterdir():
             if not directory.is_dir() or directory.name.startswith("."):
@@ -349,6 +398,6 @@ class AdmissionStore:
             try:
                 self._read(directory)
             except (KeyError, AdmissionValidationError):
-                continue  # referenced but unreadable: keep the evidence for an operator to inspect
+                continue  # damaged: reported by damaged_bundles(), never repaired here
             recovered.add(referenced[directory.name])
         return tuple(sorted(recovered))
