@@ -20,13 +20,25 @@ from .records import (
     normalize_bundle,
     read_flat_yaml,
 )
+from .store import (
+    AdmissionConflict,
+    AdmissionInterrupted,
+    AdmissionReceipt,
+    AdmissionStore,
+    AdmissionValidationError,
+)
 
 __all__ = [
     "DESCRIPTOR_VERSION",
     "EVIDENCE_GRADES",
     "READER_PROFILE",
     "RECORD_KINDS",
+    "AdmissionConflict",
     "AdmissionDescriptor",
+    "AdmissionInterrupted",
+    "AdmissionReceipt",
+    "AdmissionStore",
+    "AdmissionValidationError",
     "ArtifactError",
     "ArtifactRecord",
     "BundleLimits",
