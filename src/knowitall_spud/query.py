@@ -32,6 +32,7 @@ _SOURCE_SCHEMA_ROOT = Path(__file__).parents[2] / "schemas" / ARTIFACT_CONTRACT
 
 _BINDING_REASONS = frozenset({
     "unverified_source_binding",
+    "ambiguous_bound_graph",
     "unbound_commit_evidence",
     "unbound_graph_source_files",
     "missing_bound_graph",

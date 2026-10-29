@@ -39,6 +39,7 @@ RUN_MANIFEST_PATH = "run-manifest.yaml"
 CURRENT_ARTICLE_ROOT = "spud-out/markdown"
 LEGACY_ARTICLE_ROOT = "spud-out"
 LIMITATION_REASONS = (
+    "ambiguous_bound_graph",
     "invalid_citation_records",
     "invalid_graph_records",
     "malformed_citation_index",

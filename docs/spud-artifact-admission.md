@@ -103,7 +103,9 @@ must be covered by the manifest, otherwise the bundle keeps the
 `unbound_graph_source_files` limitation and stays `asserted` or `unknown`. The
 retained manifest must itself name the same commit, otherwise the bundle keeps
 the `unbound_commit_evidence` limitation: matching digests and paths never
-establish a commit identity. A
+establish a commit identity. One binding names one graph digest, so a bundle
+retaining more than one graph keeps the `ambiguous_bound_graph` limitation
+rather than extending a verified binding to an unverified graph. A
 bare `commit_sha` is always only `asserted`. Source coverage stays `unknown`
 unless a verified binding supplies `complete` or `partial`.
 
@@ -117,7 +119,7 @@ unless a verified binding supplies `complete` or `partial`.
 | `undecodable_narrative_text` | Narrative bytes are not decodable text |
 | `unknown_generator_version` | The caller supplied no usable producer version; a blank value is retained but not believed |
 | `skipped_uploads` | A retained manifest reports skipped files |
-| `unverified_source_binding`, `missing_bound_graph`, `unbound_graph_source_files`, `unbound_commit_evidence` | A supplied binding could not be verified against retained evidence |
+| `unverified_source_binding`, `missing_bound_graph`, `ambiguous_bound_graph`, `unbound_graph_source_files`, `unbound_commit_evidence` | A supplied binding could not be verified against retained evidence |
 
 Graph identities, labels, relations, citation labels and declared limitation
 scopes must carry non-whitespace content: unusable retained fields keep their

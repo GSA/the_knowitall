@@ -455,9 +455,13 @@ def _verify_binding(
     graph_source_files: frozenset[str],
     graph_sources_complete: bool,
 ) -> tuple[dict[str, str] | None, str | None]:
-    graph = next((item for item in artifacts if item.role == "graph"), None)
-    if graph is None:
+    graphs = [item for item in artifacts if item.role == "graph"]
+    if not graphs:
         return None, "missing_bound_graph"
+    if len(graphs) > 1:
+        # One binding names one graph digest; it never vouches for a second graph.
+        return None, "ambiguous_bound_graph"
+    graph = graphs[0]
     graph_digest = binding.get("graph_digest")
     if not is_digest(graph_digest) or graph_digest != graph.content_digest:
         return None, "unverified_source_binding"

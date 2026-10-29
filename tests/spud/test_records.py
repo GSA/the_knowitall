@@ -17,6 +17,7 @@ from conftest import (
     RUN_MANIFEST_PATH,
     SOURCE_EVIDENCE_PATH,
     digest_of,
+    write_file,
 )
 
 
@@ -470,3 +471,39 @@ def test_read_flat_yaml_skips_double_quoted_scalars_it_cannot_represent():
     )
 
     assert read_flat_yaml(data.encode("utf-8")) == {"plain": "kept"}
+
+
+@pytest.mark.parametrize("named", ["graphify-out/graph.json", "graphify-out/graph-extra.json"])
+def test_binding_is_not_bound_when_a_second_graph_was_never_verified(make_bundle, named):
+    bundle_root, value = make_bundle(layout="explicit")
+    second = "graphify-out/graph-extra.json"
+    write_file(bundle_root, second, json.dumps({"nodes": GRAPH_NODES, "edges": []}, indent=2))
+    value["artifacts"] = list(value["artifacts"]) + [{"role": "graph", "path": second}]
+    write_file(
+        bundle_root,
+        SOURCE_EVIDENCE_PATH,
+        json.dumps(
+            {
+                "snapshot_id": "snapshot-1",
+                "commit": "1" * 40,
+                "files": [
+                    {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
+                    {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},
+                ],
+            }
+        ),
+    )
+    value["artifacts"].append({"role": "source_evidence", "path": SOURCE_EVIDENCE_PATH})
+    value["source_binding"] = {
+        "graph_digest": digest_of(bundle_root / named),
+        "snapshot_id": "snapshot-1",
+        "commit_sha": "1" * 40,
+        "content_manifest_digest": digest_of(bundle_root / SOURCE_EVIDENCE_PATH),
+        "content_manifest_path": SOURCE_EVIDENCE_PATH,
+    }
+
+    bundle = normalize(bundle_root, value)
+
+    assert bundle.revision_binding == "asserted"
+    assert bundle.bound_snapshot is None
+    assert (GRAPH_PATH, "ambiguous_bound_graph") in bundle.limitations
