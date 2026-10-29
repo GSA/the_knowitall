@@ -37,6 +37,7 @@ BINDING_ASSERTED = "asserted"
 BINDING_BOUND = "bound"
 
 COMMIT_KEYS = ("commit_sha", "commit", "revision", "source_commit")
+PLACEHOLDER_VALUES = frozenset({"", "-", "n/a", "na", "none", "null", "tbd", "unknown", "unset"})
 NARRATIVE_ROLES = ("graph_report", "article")
 MANIFEST_ROLES = ("okf_manifest", "run_manifest")
 OPAQUE_ROLES = ("archive",)
@@ -129,9 +130,10 @@ def _source_lines(value: object) -> tuple[int | None, int | None]:
         try:
             last = int(tail.strip().lstrip("Ll"))
         except ValueError:
-            return start, start + 1
-        if last >= start:
-            end = last + 1
+            return None, None
+        if last < start:
+            return None, None
+        end = last + 1
     return start, end
 
 
@@ -373,10 +375,20 @@ def _manifest_records(artifact: RetainedArtifact) -> tuple[tuple[ArtifactRecord,
     return tuple(records), ()
 
 
+def _asserted_commit(fields: Mapping[str, object]) -> bool:
+    """A commit key counts as asserted only with a real, non-placeholder value."""
+    for key in COMMIT_KEYS:
+        value = fields.get(key)
+        if isinstance(value, str) and value.strip().casefold() not in PLACEHOLDER_VALUES:
+            return True
+    return False
+
+
 def _verify_binding(
     binding: Mapping[str, object],
     artifacts: tuple[RetainedArtifact, ...],
     graph_source_files: frozenset[str],
+    graph_sources_complete: bool,
 ) -> tuple[dict[str, str] | None, str | None]:
     graph = next((item for item in artifacts if item.role == "graph"), None)
     if graph is None:
@@ -414,7 +426,7 @@ def _verify_binding(
         if not isinstance(path, str) or not is_digest(digest):
             return None, "unverified_source_binding"
         covered.add(path)
-    if not graph_source_files <= covered:
+    if not graph_sources_complete or not graph_source_files <= covered:
         return None, "unbound_graph_source_files"
     return {
         "snapshot_id": snapshot_id,
@@ -455,20 +467,22 @@ def normalize_bundle(
         if skipped is not None and skipped.strip() not in {"0", ""}:
             found.append((path, "skipped_uploads"))
 
+    graph_records = [record for record in records if record.kind in {KIND_SYMBOL, KIND_RELATIONSHIP}]
     graph_source_files = frozenset(
-        record.source_reference.path
-        for record in records
-        if record.kind in {KIND_SYMBOL, KIND_RELATIONSHIP} and record.source_reference is not None
+        record.source_reference.path for record in graph_records if record.source_reference is not None
     )
-    asserted = any(
-        key in fields for fields in manifest_fields.values() for key in COMMIT_KEYS
-    ) or any(key in value.supplied for key in COMMIT_KEYS)
+    graph_sources_complete = bool(graph_records) and all(
+        record.source_reference is not None for record in graph_records
+    )
+    asserted = any(_asserted_commit(fields) for fields in manifest_fields.values()) or _asserted_commit(value.supplied)
     bound_snapshot: dict[str, str] | None = None
     revision_binding = BINDING_ASSERTED if asserted else BINDING_UNKNOWN
     source_coverage = "unknown"
     if value.source_binding is not None:
-        asserted = asserted or isinstance(value.source_binding.get("commit_sha"), str)
-        bound_snapshot, failure = _verify_binding(value.source_binding, artifacts, graph_source_files)
+        asserted = asserted or _asserted_commit(value.source_binding)
+        bound_snapshot, failure = _verify_binding(
+            value.source_binding, artifacts, graph_source_files, graph_sources_complete
+        )
         if bound_snapshot is not None:
             revision_binding = BINDING_BOUND
             supplied_coverage = value.source_binding.get("source_coverage")
