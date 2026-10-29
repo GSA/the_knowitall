@@ -10,6 +10,7 @@ class InventoryEntry:
     path: str
     content_digest: str
     data: bytes
+    mode: str = "100644"
 
 
 def safe_path(value: str) -> PurePosixPath:
@@ -39,5 +40,5 @@ def clean_inventory(repo: Path) -> tuple[tuple[InventoryEntry, ...], tuple[dict[
             excluded.append({"path": path, "reason": "unsupported_git_mode"})
             continue
         data = run_git(repo, "show", f"HEAD:{path}", text=False)
-        included.append(InventoryEntry(path, "sha256:" + hashlib.sha256(data).hexdigest(), data))
+        included.append(InventoryEntry(path, "sha256:" + hashlib.sha256(data).hexdigest(), data, mode.decode("ascii")))
     return tuple(sorted(included, key=lambda item: item.path.encode())), tuple(sorted(excluded, key=lambda item: item["path"].encode()))
