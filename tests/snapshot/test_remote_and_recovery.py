@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -42,6 +43,33 @@ def test_remote_clone_and_fetch_capture_origin_without_changing_repository_ident
     assert first.origin == second.origin == str(remote.resolve())
     assert first.snapshot_id != second.snapshot_id
     assert first.commit != second.commit
+
+
+def test_remote_refresh_never_executes_checkout_filters(make_repo, tmp_path):
+    upstream = make_repo()
+    remote = tmp_path / "upstream.git"
+    git(upstream, "clone", "--bare", "-q", str(upstream), str(remote))
+    checkout = acquire_remote(str(remote), tmp_path / "checkout")
+    marker = tmp_path / "smudge-ran"
+    filter_command = f"sh -c 'touch {marker}; cat'"
+    git(checkout.path, "config", "filter.hostile.smudge", filter_command)
+    git(checkout.path, "config", "filter.hostile.required", "true")
+    (upstream / ".gitattributes").write_text("*.py filter=hostile\n", encoding="utf-8")
+    git(upstream, "add", ".")
+    git(upstream, "commit", "-qm", "add filter attributes")
+    git(upstream, "push", "-q", str(remote), "HEAD")
+
+    acquire_remote(str(remote), checkout.path)
+
+    assert not marker.exists()
+    assert (checkout.path / "src" / "orders.py").is_file()
+    configured_filters = subprocess.run(
+        ["git", "config", "--get-regexp", "^filter\\."],
+        cwd=checkout.path,
+        capture_output=True,
+        check=False,
+    )
+    assert configured_filters.returncode == 1
 
 
 def test_remote_intake_rejects_credential_bearing_origins(tmp_path):

@@ -104,13 +104,15 @@ def _dirty_inventory(repo: Path, included: tuple[InventoryEntry, ...], excluded:
 def create_snapshot(repo: Path, project_id: str, repository_id: str, destination: Path, policy: SnapshotPolicy, *, origin: str | None = None) -> SnapshotManifest:
     if not project_id or not repository_id:
         raise ValueError("project and repository identities must be nonempty")
+    commit = commit_identity(repo)
+    initial_status = status_entries(repo)
     tracked, untracked = _status(repo)
     dirty = bool(tracked or untracked)
     if dirty and policy.dirty != "admit":
         raise ValueError("dirty Git input rejected by policy")
-    commit = commit_identity(repo)
+    commit_oid = commit.split(":", 1)[1]
     try:
-        included, excluded = clean_inventory(repo)
+        included, excluded = clean_inventory(repo, commit_oid)
         failed: tuple[dict[str, str], ...] = ()
         inventory_complete = True
     except GitError:
@@ -119,8 +121,12 @@ def create_snapshot(repo: Path, project_id: str, repository_id: str, destination
         included, excluded = (), ()
         failed = ({"path": ".", "reason": "inventory_listing_failed"},)
         inventory_complete = False
+    if commit_identity(repo) != commit or status_entries(repo) != initial_status:
+        raise ValueError("repository changed during snapshot")
     if dirty and inventory_complete:
         included, excluded = _dirty_inventory(repo, included, excluded, policy, tracked, untracked)
+    if commit_identity(repo) != commit or status_entries(repo) != initial_status:
+        raise ValueError("repository changed during snapshot")
     content_bytes = b"".join(entry.path.encode() + b"\0" + entry.mode.encode() + b"\0" + entry.content_digest.encode() + b"\0" for entry in included)
     content_digest = "sha256:" + hashlib.sha256(content_bytes).hexdigest()
     dirty_digest = "sha256:" + hashlib.sha256(status_entries(repo) + content_bytes).hexdigest() if dirty else None
@@ -142,6 +148,8 @@ def create_snapshot(repo: Path, project_id: str, repository_id: str, destination
             output.write_bytes(entry.data)
             output.chmod(0o755 if entry.mode == "100755" else 0o644)
         (temporary / "manifest.json").write_bytes(manifest_bytes)
+        if commit_identity(repo) != commit or status_entries(repo) != initial_status:
+            raise ValueError("repository changed during snapshot")
         os.replace(temporary, target)
     finally:
         if temporary.exists():
