@@ -38,13 +38,30 @@ def test_existing_receipt_retry_persists_rename_before_acknowledgment(
 
     if successor:
         other, _ = generation_factory(fixture="typescript_client")
+        other_staged = store.stage(other)
+        store = PublicationStore(tmp_path)
+        # A visible receipt is not necessarily durable. B must preserve A's
+        # selection if the predecessor receipt barrier still fails.
+        with pytest.raises(OSError, match="receipt directory synchronization failed"):
+            store.publish(
+                other_staged, expected_current=selected,
+                failpoint="after_current_replace",
+            )
+        assert store.resolve_current("project-a", "repo-a") == selected
+        assert receipt_path.read_bytes() == receipt_bytes
+        assert receipt_syncs == []
+
+        fail_sync = False
         with pytest.raises(PublicationInterrupted):
             store.publish(
-                store.stage(other), expected_current=selected,
+                other_staged, expected_current=selected,
                 failpoint="after_current_replace",
             )
         selected = store.resolve_current("project-a", "repo-a")
         assert selected.generation_id == other.generation_id
+        assert receipt_syncs == [True]
+        assert list(receipts.iterdir()) == [receipt_path]
+        receipt_syncs.clear()
 
     # Reopen after interruption: the receipt is visible but its rename is not
     # yet durable. A failed barrier must not acknowledge even a historical retry.
