@@ -132,6 +132,10 @@ receipt; changed bytes, changed metadata or an added companion raises
 `AdmissionConflict` and requires a new `bundle_id`. An interrupted admission is
 never queryable, and a corrupted artifact raises `AdmissionValidationError` with
 a digest mismatch on read-back rather than answering from damaged evidence.
+`recover()` reclaims interrupted staging and unreferenced directories;
+`damaged_bundles()` reports referenced bundles whose evidence cannot be read,
+and `discard_damaged()` removes one so its `bundle_id` can be re-admitted.
+Damage is never repaired by inference and a readable bundle is never discarded.
 
 ## Querying admitted artifacts
 

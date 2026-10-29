@@ -1,6 +1,7 @@
 from .artifacts import ArtifactError, RetainedArtifact, read_bundle, safe_relative_path
 from .descriptor import (
     DESCRIPTOR_VERSION,
+    LIMITATION_REASONS,
     READER_PROFILE,
     AdmissionDescriptor,
     BundleLimits,
@@ -39,6 +40,7 @@ __all__ = [
     "ARTIFACT_CONTRACT",
     "DESCRIPTOR_VERSION",
     "EVIDENCE_GRADES",
+    "LIMITATION_REASONS",
     "READER_PROFILE",
     "RECORD_KINDS",
     "AdmissionConflict",
