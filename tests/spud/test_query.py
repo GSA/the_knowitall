@@ -278,6 +278,7 @@ def bound_value(bundle_root, value, *, source_coverage):
 def test_declared_partial_source_coverage_is_never_answered_as_absence(tmp_path, make_bundle):
     evidence = {
         "snapshot_id": "snapshot-1",
+        "commit": "1" * 40,
         "files": [
             {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
             {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},
@@ -304,6 +305,7 @@ def test_declared_partial_source_coverage_is_never_answered_as_absence(tmp_path,
 def test_complete_declared_source_coverage_still_answers_ok(tmp_path, make_bundle):
     evidence = {
         "snapshot_id": "snapshot-1",
+        "commit": "1" * 40,
         "files": [
             {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
             {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},

@@ -156,6 +156,42 @@ def _attribution(value: Mapping[str, object], keys: Iterable[str]) -> dict[str, 
     return attribution
 
 
+def _strip_comment(line: str) -> str | None:
+    """Remove a trailing comment, honoring quoted scalars.
+
+    Returns None when a quote is left unterminated, so a scalar the reader
+    cannot faithfully parse is skipped rather than silently truncated.
+    """
+    quote: str | None = None
+    index = 0
+    while index < len(line):
+        character = line[index]
+        if quote is None:
+            if character in "'\"":
+                quote = character
+            elif character == "#" and (index == 0 or line[index - 1] in " \t"):
+                return line[:index].rstrip()
+        elif quote == '"' and character == "\\":
+            index += 1
+        elif character == quote:
+            if quote == "'" and line[index + 1 : index + 2] == "'":
+                index += 1
+            else:
+                quote = None
+        index += 1
+    return None if quote is not None else line.rstrip()
+
+
+def _scalar(value: str) -> str | None:
+    """Read one flat scalar, or None for syntax the reader cannot represent."""
+    if len(value) >= 2 and value[0] in "'\"" and value[-1] == value[0]:
+        inner = value[1:-1]
+        return inner.replace("''", "'") if value[0] == "'" else inner
+    if value[0] in "{[&*!|>'\"":
+        return None
+    return value
+
+
 def read_flat_yaml_spans(data: bytes) -> dict[str, tuple[str, int, int]]:
     """Read flat YAML fields with the half-open source line range of each field.
 
@@ -175,8 +211,10 @@ def read_flat_yaml_spans(data: bytes) -> dict[str, tuple[str, int, int]]:
         raw = lines[index]
         start_line = index + 1
         index += 1
-        line = raw.split("#", 1)[0].rstrip() if not raw.lstrip().startswith("#") else ""
-        if not line.strip() or line != line.lstrip() or line.startswith("-"):
+        if raw.lstrip().startswith("#"):
+            continue
+        line = _strip_comment(raw)
+        if line is None or not line.strip() or line != line.lstrip() or line.startswith("-"):
             continue
         key, separator, value = line.partition(":")
         key = key.strip()
@@ -184,9 +222,10 @@ def read_flat_yaml_spans(data: bytes) -> dict[str, tuple[str, int, int]]:
             continue
         value = value.strip()
         if value:
-            if value[0] in "{[&*!|>":
+            scalar = _scalar(value)
+            if scalar is None:
                 continue
-            fields[key] = (value.strip("'\""), start_line, start_line + 1)
+            fields[key] = (scalar, start_line, start_line + 1)
             continue
         block: list[str] = []
         scalars = True
@@ -198,11 +237,16 @@ def read_flat_yaml_spans(data: bytes) -> dict[str, tuple[str, int, int]]:
             if follower == follower.lstrip():
                 break
             index += 1
-            item = follower.strip()
-            if item.startswith("- ") and ":" not in item:
-                block.append(item[2:].strip().strip("'\""))
-            else:
+            cleaned = _strip_comment(follower)
+            if cleaned is None:
                 scalars = False
+                continue
+            item = cleaned.strip()
+            scalar = _scalar(item[2:].strip()) if item.startswith("- ") and ":" not in item else None
+            if scalar is None:
+                scalars = False
+            else:
+                block.append(scalar)
         if scalars and block:
             fields[key] = (", ".join(block), start_line, index + 1)
     return fields
@@ -440,6 +484,12 @@ def _verify_binding(
         covered.add(path)
     if not graph_sources_complete or not graph_source_files <= covered:
         return None, "unbound_graph_source_files"
+    if not _asserted_commit(payload) or not any(
+        isinstance(payload.get(key), str) and payload[key].strip() == commit.strip() for key in COMMIT_KEYS
+    ):
+        # Retained evidence must itself associate the snapshot with the commit;
+        # matching digests and paths never establish an asserted revision.
+        return None, "unbound_commit_evidence"
     return {
         "snapshot_id": snapshot_id,
         "commit_sha": commit,

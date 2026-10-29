@@ -285,3 +285,17 @@ def test_structurally_damaged_metadata_is_reported_as_damage(tmp_path, admitted_
 
     store.discard_damaged("project-a", "repo-a", "bundle-1")
     assert store.admit(bundle) == receipt
+
+
+@pytest.mark.parametrize("payload", ["null", "[]", '"text"', '{"bundle_id": "bundle-1"}'])
+def test_structurally_damaged_pointers_are_absence_not_a_crash(tmp_path, admitted_bundle, payload):
+    store, _bundle, _receipt = admitted_bundle()
+    index = next(path for path in (store.root / "index").iterdir() if path.is_dir())
+    pointer = next(path for path in index.iterdir() if not path.name.startswith("."))
+    pointer.write_text(payload, encoding="utf-8")
+
+    with pytest.raises(KeyError):
+        store.open_bundle("project-a", "repo-a", "bundle-1")
+    assert store.list_bundles("project-a", "repo-a") == ()
+    assert store.damaged_bundles() == ()
+    assert store.recover() == ()

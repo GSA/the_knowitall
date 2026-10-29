@@ -83,7 +83,7 @@ Grades record *how* evidence was produced and are never promoted.
 | `recorded_artifact` | `graph_symbol`, `graph_relationship` | Graphify graph nodes and edges, with the producer's own `_origin`/`confidence` attribution |
 | `recorded_citation` | `citation_entry` | SPUD's flat citation index; `relation` is always `null`, so a citation never becomes a relationship |
 | `generated_narrative` | `narrative_passage` | Graph report and article text, inert, with half-open `[start_line, end_line)` locators |
-| `retained_provenance` | `provenance_assertion` | OKF and run-manifest fields, retained as asserted, not verified, with half-open `[start_line, end_line)` locators |
+| `retained_provenance` | `provenance_assertion` | OKF and run-manifest fields, retained as asserted, not verified, with half-open `[start_line, end_line)` locators; scalars the flat reader cannot represent faithfully are skipped rather than truncated |
 
 Every record carries a `locator` naming the artifact path, its content digest
 and either a JSON pointer or a line range, so any answer can be traced back to
@@ -100,7 +100,10 @@ retained bytes.
 `bound` requires `graph_digest`, `snapshot_id`, `commit_sha`,
 `content_manifest_digest` and `content_manifest_path`; every graph source file
 must be covered by the manifest, otherwise the bundle keeps the
-`unbound_graph_source_files` limitation and stays `asserted` or `unknown`. A
+`unbound_graph_source_files` limitation and stays `asserted` or `unknown`. The
+retained manifest must itself name the same commit, otherwise the bundle keeps
+the `unbound_commit_evidence` limitation: matching digests and paths never
+establish a commit identity. A
 bare `commit_sha` is always only `asserted`. Source coverage stays `unknown`
 unless a verified binding supplies `complete` or `partial`.
 
@@ -114,7 +117,7 @@ unless a verified binding supplies `complete` or `partial`.
 | `undecodable_narrative_text` | Narrative bytes are not decodable text |
 | `unknown_generator_version` | The caller supplied no producer version |
 | `skipped_uploads` | A retained manifest reports skipped files |
-| `unverified_source_binding`, `missing_bound_graph`, `unbound_graph_source_files` | A supplied binding could not be verified against retained evidence |
+| `unverified_source_binding`, `missing_bound_graph`, `unbound_graph_source_files`, `unbound_commit_evidence` | A supplied binding could not be verified against retained evidence |
 
 Limitations are never repaired by inference. They appear in the receipt, in
 `admission.limitations`, and as machine-readable `missing_evidence` entries

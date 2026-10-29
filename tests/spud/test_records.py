@@ -159,6 +159,7 @@ def test_revision_binding_asserted_from_manifest_commit(make_bundle):
 def test_revision_binding_bound_requires_graph_digest_and_snapshot(make_bundle):
     evidence = {
         "snapshot_id": "snapshot-1",
+        "commit": "1" * 40,
         "files": [
             {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
             {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},
@@ -186,7 +187,7 @@ def test_revision_binding_bound_requires_graph_digest_and_snapshot(make_bundle):
 
 
 def test_revision_binding_rejects_binding_with_wrong_graph_digest(make_bundle):
-    evidence = {"snapshot_id": "snapshot-1", "files": []}
+    evidence = {"snapshot_id": "snapshot-1", "commit": "1" * 40, "files": []}
     bundle_root, value = make_bundle(source_evidence=evidence)
     value["source_binding"] = {
         "graph_digest": "sha256:" + "0" * 64,
@@ -247,6 +248,7 @@ def test_read_flat_yaml_rejects_undecodable_bytes():
 def bound_bundle(make_bundle, *, evidence=None, graph_override=None, binding_extra=None, **kwargs):
     evidence = evidence if evidence is not None else {
         "snapshot_id": "snapshot-1",
+        "commit": "1" * 40,
         "files": [
             {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
             {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},
@@ -387,3 +389,74 @@ def test_provenance_assertions_locate_their_manifest_lines(make_bundle):
         start, end = record.locator.start_line, record.locator.end_line
         assert start is not None and end is not None and end > start
         assert any(line.strip().startswith(f"{record.name}:") for line in lines[start - 1 : end - 1])
+
+
+def test_binding_requires_commit_evidence_in_the_retained_manifest(make_bundle):
+    bundle = bound_bundle(
+        make_bundle,
+        evidence={
+            "snapshot_id": "snapshot-1",
+            "files": [
+                {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
+                {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},
+            ],
+        },
+    )
+
+    assert bundle.revision_binding == "asserted"
+    assert bundle.bound_snapshot is None
+    assert (GRAPH_PATH, "unbound_commit_evidence") in bundle.limitations
+
+
+def test_binding_rejects_commit_evidence_naming_a_different_commit(make_bundle):
+    bundle = bound_bundle(
+        make_bundle,
+        evidence={
+            "snapshot_id": "snapshot-1",
+            "commit": "9" * 40,
+            "files": [
+                {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
+                {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},
+            ],
+        },
+    )
+
+    assert bundle.revision_binding == "asserted"
+    assert bundle.bound_snapshot is None
+    assert (GRAPH_PATH, "unbound_commit_evidence") in bundle.limitations
+
+
+def test_binding_is_bound_when_commit_evidence_agrees(make_bundle):
+    bundle = bound_bundle(
+        make_bundle,
+        evidence={
+            "snapshot_id": "snapshot-1",
+            "commit": "1" * 40,
+            "files": [
+                {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
+                {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},
+            ],
+        },
+    )
+
+    assert bundle.revision_binding == "bound"
+    assert bundle.bound_snapshot["commit_sha"] == "1" * 40
+
+
+def test_read_flat_yaml_preserves_hash_characters_inside_quoted_scalars():
+    data = (
+        'title: "Release #42"\n'
+        "ticket: 'bug #7 fixed'\n"
+        "bare: value # trailing comment\n"
+        'unterminated: "open #value\n'
+        "tags:\n"
+        "  - 'tag #1'\n"
+        "  - plain # comment\n"
+    )
+
+    assert read_flat_yaml(data.encode("utf-8")) == {
+        "title": "Release #42",
+        "ticket": "bug #7 fixed",
+        "bare": "value",
+        "tags": "tag #1, plain",
+    }

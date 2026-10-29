@@ -30,7 +30,12 @@ ARTIFACT_CONTRACT = "knowitall.spud-artifacts/v1"
 _PACKAGED_SCHEMA_ROOT = files("knowitall_spud").joinpath("schemas")
 _SOURCE_SCHEMA_ROOT = Path(__file__).parents[2] / "schemas" / ARTIFACT_CONTRACT
 
-_BINDING_REASONS = frozenset({"unverified_source_binding", "unbound_graph_source_files", "missing_bound_graph"})
+_BINDING_REASONS = frozenset({
+    "unverified_source_binding",
+    "unbound_commit_evidence",
+    "unbound_graph_source_files",
+    "missing_bound_graph",
+})
 _PROVENANCE_REASONS = frozenset(
     {"unknown_generator_version", "skipped_uploads", "unreadable_manifest_fields", "missing_okf_manifest", "missing_run_manifest"}
 )
