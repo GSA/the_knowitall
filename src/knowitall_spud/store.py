@@ -135,20 +135,14 @@ def _decode_bundle(value: dict[str, object], payloads: dict[str, bytes]) -> Norm
 
 
 def _receipt(bundle: NormalizedBundle) -> AdmissionReceipt:
+    """Bind the receipt digest to the complete normalized metadata.
+
+    Record payloads, artifact roles and supplied provenance are all hashed, so
+    an edit to retained metadata that preserves record ids still fails
+    read-back verification.
+    """
     digests = tuple(sorted((item.path, item.content_digest) for item in bundle.artifacts))
-    identity = [
-        bundle.project_id,
-        bundle.repository_id,
-        bundle.bundle_id,
-        bundle.reader_profile,
-        [list(item) for item in digests],
-        [record.record_id for record in bundle.records],
-        [list(item) for item in bundle.limitations],
-        bundle.revision_binding,
-        bundle.artifact_completeness,
-        bundle.source_coverage,
-        bundle.bound_snapshot,
-    ]
+    identity = _metadata(bundle)
     return AdmissionReceipt(
         project_id=bundle.project_id,
         repository_id=bundle.repository_id,
@@ -213,19 +207,26 @@ class AdmissionStore:
             }
         except (OSError, json.JSONDecodeError) as error:
             raise AdmissionValidationError(f"retained bundle at {directory.name} cannot be read") from error
-        bundle = _decode_bundle(metadata, payloads)
-        receipt = AdmissionReceipt(
-            project_id=receipt_value["project_id"],
-            repository_id=receipt_value["repository_id"],
-            bundle_id=receipt_value["bundle_id"],
-            receipt_digest=receipt_value["receipt_digest"],
-            reader_profile=receipt_value["reader_profile"],
-            artifact_digests=tuple(tuple(item) for item in receipt_value["artifact_digests"]),
-            revision_binding=receipt_value["revision_binding"],
-            artifact_completeness=receipt_value["artifact_completeness"],
-            source_coverage=receipt_value["source_coverage"],
-            limitations=tuple(tuple(item) for item in receipt_value["limitations"]),
-        )
+        try:
+            bundle = _decode_bundle(metadata, payloads)
+            receipt = AdmissionReceipt(
+                project_id=receipt_value["project_id"],
+                repository_id=receipt_value["repository_id"],
+                bundle_id=receipt_value["bundle_id"],
+                receipt_digest=receipt_value["receipt_digest"],
+                reader_profile=receipt_value["reader_profile"],
+                artifact_digests=tuple(tuple(item) for item in receipt_value["artifact_digests"]),
+                revision_binding=receipt_value["revision_binding"],
+                artifact_completeness=receipt_value["artifact_completeness"],
+                source_coverage=receipt_value["source_coverage"],
+                limitations=tuple(tuple(item) for item in receipt_value["limitations"]),
+            )
+        except AdmissionValidationError:
+            raise
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
+            raise AdmissionValidationError(
+                f"retained bundle at {directory.name} has unusable metadata"
+            ) from error
         if receipt != _receipt(bundle):
             raise AdmissionValidationError(f"receipt does not match retained bundle {receipt.bundle_id!r}")
         return bundle, receipt

@@ -242,3 +242,46 @@ def test_discard_refuses_to_remove_a_readable_bundle(tmp_path, admitted_bundle):
         store.discard_damaged("project-a", "repo-a", "bundle-1")
 
     assert store.list_bundles("project-a", "repo-a") == ("bundle-1",)
+
+
+def metadata_path(store):
+    directory = next(path for path in (store.root / "bundles").iterdir() if path.is_dir())
+    return directory / "metadata.json"
+
+
+def test_read_back_rejects_a_record_edited_without_changing_its_id(tmp_path, admitted_bundle):
+    store, _bundle, _receipt = admitted_bundle()
+    path = metadata_path(store)
+    value = json.loads(path.read_bytes())
+    narrative = next(item for item in value["records"] if item["kind"] == "narrative_passage")
+    narrative["text"] = "substituted narrative text"
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(AdmissionValidationError, match="receipt does not match"):
+        store.open_bundle("project-a", "repo-a", "bundle-1")
+
+
+def test_read_back_rejects_substituted_supplied_provenance(tmp_path, admitted_bundle):
+    store, _bundle, _receipt = admitted_bundle()
+    path = metadata_path(store)
+    value = json.loads(path.read_bytes())
+    value["supplied"] = dict(value["supplied"], generator_version="graphifyy==9.9.9")
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(AdmissionValidationError, match="receipt does not match"):
+        store.open_bundle("project-a", "repo-a", "bundle-1")
+
+
+def test_structurally_damaged_metadata_is_reported_as_damage(tmp_path, admitted_bundle):
+    store, bundle, receipt = admitted_bundle()
+    path = metadata_path(store)
+    value = json.loads(path.read_bytes())
+    value["records"] = None
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(AdmissionValidationError):
+        store.open_bundle("project-a", "repo-a", "bundle-1")
+    assert store.damaged_bundles() == (("project-a", "repo-a", "bundle-1"),)
+
+    store.discard_damaged("project-a", "repo-a", "bundle-1")
+    assert store.admit(bundle) == receipt

@@ -119,12 +119,24 @@ def _admission(bundle: NormalizedBundle) -> dict[str, object]:
     }
 
 
+def _echo_identity(request: Mapping[str, object], key: str) -> str | None:
+    """Echo a caller identity only when it is a usable string, else null.
+
+    An unusable identity is never repaired or reformatted, so an
+    `invalid_request` envelope still validates against the published schema.
+    """
+    if not isinstance(request, Mapping):
+        return None
+    value = request.get(key)
+    return value if isinstance(value, str) and value.strip() else None
+
+
 def _envelope(request: Mapping[str, object], status: str) -> dict[str, object]:
     return {
         "contract": ARTIFACT_CONTRACT,
-        "request_id": request.get("request_id") if isinstance(request, Mapping) else None,
-        "project_id": request.get("project_id") if isinstance(request, Mapping) else None,
-        "repository_id": request.get("repository_id") if isinstance(request, Mapping) else None,
+        "request_id": _echo_identity(request, "request_id"),
+        "project_id": _echo_identity(request, "project_id"),
+        "repository_id": _echo_identity(request, "repository_id"),
         "resolved": None,
         "status": status,
         "admission": {"artifacts": [], "source_coverage": "unknown", "limitations": []},

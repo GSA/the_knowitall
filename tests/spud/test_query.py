@@ -365,3 +365,15 @@ def test_pagination_survives_a_fresh_request_id_per_page(admitted_bundle):
     assert second["status"] == "ok"
     assert second["request_id"] == "page-2"
     assert second["records"][0]["record_id"] != first["records"][0]["record_id"]
+
+
+@pytest.mark.parametrize("identity", [123, "", "  ", None, {"id": "x"}])
+def test_invalid_identities_are_echoed_as_null_in_the_invalid_request_envelope(admitted_bundle, identity):
+    store, _bundle, _receipt = admitted_bundle()
+    service = service_for(store)
+
+    response = service.execute({"contract": ARTIFACT_CONTRACT, "request_id": identity})
+
+    assert response["status"] == "invalid_request"
+    assert response["request_id"] is None
+    validate_artifact_response(response)
