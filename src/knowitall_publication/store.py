@@ -201,7 +201,10 @@ class PublicationStore:
             raise PublicationConflict("current does not match expected predecessor")
         intent = json.dumps({"target": asdict(reference), "predecessor": asdict(current) if current else None}, sort_keys=True).encode()
         if intent_path.exists() and intent_path.read_bytes() != intent:
-            raise PublicationConflict("publication intent predecessor changed")
+            # Completed/selected generations returned above. Only an explicitly
+            # validated predecessor permits rebinding an unpublished intent.
+            if expected_current is _UNSPECIFIED:
+                raise PublicationConflict("publication intent predecessor changed")
         atomic_write(intent_path, intent)
         destination = self._generation_path(generation.generation_id)
         if destination.exists():
