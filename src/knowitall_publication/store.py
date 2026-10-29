@@ -5,6 +5,19 @@ import shutil
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from functools import wraps
+
+from .durable import atomic_write, durable_directory, locked
+
+_UNSPECIFIED = object()
+
+
+def _serialized(method):
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        with self.locked():
+            return method(self, *args, **kwargs)
+    return wrapped
 
 from knowitall_contract import Coverage, GenerationRef, SnapshotRef, SourceRange
 from knowitall_graphify import GraphEdge, GraphGeneration, GraphNode
@@ -67,7 +80,8 @@ def _decode(metadata: bytes, artifact: bytes) -> GraphGeneration:
 
 def _write_generation(directory: Path, generation: GraphGeneration) -> None:
     directory.mkdir(parents=True)
-    for name, data in (("metadata.json", _metadata(generation)), ("artifact.bin", generation.raw_artifact)):
+    metadata = _metadata(generation)
+    for name, data in (("metadata.json", metadata), ("artifact.bin", generation.raw_artifact), ("metadata.sha256", hashlib.sha256(metadata).hexdigest().encode())):
         target = directory / name
         with target.open("xb") as output:
             output.write(data)
@@ -77,7 +91,13 @@ def _write_generation(directory: Path, generation: GraphGeneration) -> None:
 
 
 def _read_generation(directory: Path) -> GraphGeneration:
-    return _decode((directory / "metadata.json").read_bytes(), (directory / "artifact.bin").read_bytes())
+    try:
+        metadata = (directory / "metadata.json").read_bytes()
+        if hashlib.sha256(metadata).hexdigest().encode() != (directory / "metadata.sha256").read_bytes():
+            raise PublicationValidationError("persisted metadata digest mismatch")
+        return _decode(metadata, (directory / "artifact.bin").read_bytes())
+    except (ValueError, KeyError, TypeError, IndexError) as error:
+        raise PublicationValidationError("invalid persisted generation") from error
 
 
 def _generation_ref(generation: GraphGeneration) -> GenerationRef:
@@ -87,8 +107,12 @@ def _generation_ref(generation: GraphGeneration) -> GenerationRef:
 class PublicationStore:
     def __init__(self, root: Path):
         self.root = root
-        for name in ("stages", "generations", "current"):
-            (root / name).mkdir(parents=True, exist_ok=True)
+        durable_directory(root)
+        for name in ("stages", "generations", "current", "receipts", "intents"):
+            durable_directory(root / name)
+
+    def locked(self):
+        return locked(self.root)
 
     def _stage_path(self, stage_id: str) -> Path:
         return self.root / "stages" / _key(stage_id)
@@ -99,6 +123,7 @@ class PublicationStore:
     def _current_path(self, project_id: str, repository_id: str) -> Path:
         return self.root / "current" / _key(project_id, repository_id)
 
+    @_serialized
     def stage(self, generation: GraphGeneration) -> StagedGeneration:
         stage_id = generation.generation_id
         path = self._stage_path(stage_id)
@@ -131,7 +156,8 @@ class PublicationStore:
         generation = _read_generation(self._stage_path(stage_id))
         return StagedGeneration(stage_id, generation.generation_id)
 
-    def publish(self, staged: StagedGeneration, *, failpoint: str | None = None) -> PublicationReceipt:
+    @_serialized
+    def publish(self, staged: StagedGeneration, *, expected_current=_UNSPECIFIED, failpoint: str | None = None) -> PublicationReceipt:
         stage_path = self._stage_path(staged.stage_id)
         try:
             generation = _read_generation(stage_path)
@@ -144,6 +170,37 @@ class PublicationStore:
         self._validate(generation)
         if failpoint == "after_validation":
             raise PublicationInterrupted(failpoint)
+        reference = _generation_ref(generation)
+        pointer = (json.dumps(asdict(reference), sort_keys=True, separators=(",", ":")) + "\n").encode()
+        receipt = PublicationReceipt(reference, "sha256:" + hashlib.sha256(pointer + generation.raw_artifact).hexdigest())
+        receipt_path = self.root / "receipts" / _key(generation.generation_id)
+        if receipt_path.exists():
+            if receipt_path.read_bytes() != pointer:
+                raise PublicationValidationError("publication receipt mismatch")
+            self.open_generation(reference)
+            return receipt
+        try:
+            current = self.resolve_current(generation.snapshot.project_id, generation.snapshot.repository_id)
+        except KeyError:
+            current = None
+        if current is not None:
+            prior_intent = self.root / "intents" / _key(current.generation_id)
+            prior_receipt = self.root / "receipts" / _key(current.generation_id)
+            if prior_intent.exists() and not prior_receipt.exists():
+                value = json.loads(prior_intent.read_bytes())
+                if value["target"] != asdict(current):
+                    raise PublicationValidationError("publication intent target mismatch")
+                atomic_write(prior_receipt, (json.dumps(asdict(current), sort_keys=True, separators=(",", ":")) + "\n").encode())
+        intent_path = self.root / "intents" / _key(generation.generation_id)
+        if current == reference and intent_path.exists():
+            atomic_write(receipt_path, pointer)
+            return receipt
+        if expected_current is not _UNSPECIFIED and current != expected_current:
+            raise PublicationConflict("current does not match expected predecessor")
+        intent = json.dumps({"target": asdict(reference), "predecessor": asdict(current) if current else None}, sort_keys=True).encode()
+        if intent_path.exists() and intent_path.read_bytes() != intent:
+            raise PublicationConflict("publication intent predecessor changed")
+        atomic_write(intent_path, intent)
         destination = self._generation_path(generation.generation_id)
         if destination.exists():
             existing = _read_generation(destination)
@@ -180,16 +237,29 @@ class PublicationStore:
         _fsync_directory(self.root / "current")
         if failpoint == "after_current_replace":
             raise PublicationInterrupted(failpoint)
-        receipt_digest = "sha256:" + hashlib.sha256(pointer + generation.raw_artifact).hexdigest()
-        return PublicationReceipt(reference, receipt_digest)
+        atomic_write(receipt_path, pointer)
+        return receipt
 
     def _validate(self, generation: GraphGeneration) -> None:
         digest = "sha256:" + hashlib.sha256(generation.raw_artifact).hexdigest()
         if digest != generation.artifact_digest:
             raise PublicationValidationError("artifact digest mismatch")
+        if generation.model_routes_enabled:
+            raise PublicationValidationError("model routes are disabled")
         try:
+            raw = json.loads(generation.raw_artifact)
+            canonical = "source_snapshot_id" in raw
+            if canonical and raw["source_snapshot_id"] != generation.snapshot.snapshot_id:
+                raise ValueError("raw snapshot mismatch")
+            native_nodes = raw.get("nodes", [])
+            expected = sorted((item["id"], item["name"] if canonical else item["label"], item["path"] if canonical else item["source_file"]) for item in native_nodes)
+            actual = sorted((node.symbol_id, node.name, node.path) for node in generation.nodes)
+            if expected != actual:
+                raise ValueError("normalized nodes disagree with raw artifact")
+            if len(raw.get("edges", [])) != len(generation.edges):
+                raise ValueError("normalized edges disagree with raw artifact")
             validate_graph(generation)
-        except ValueError as error:
+        except (ValueError, KeyError, TypeError) as error:
             raise PublicationValidationError(str(error)) from error
         expected_state = "complete" if generation.coverage.inventory == "complete" and generation.coverage.extraction == "complete" else "partial"
         if generation.state != expected_state or generation.coverage.relevant_scope != expected_state:
@@ -200,6 +270,7 @@ class PublicationStore:
         if generation.generation_id != "gen-" + hashlib.sha256(identity.encode()).hexdigest():
             raise PublicationValidationError("generation identity mismatch")
 
+    @_serialized
     def recover(self) -> tuple[str, ...]:
         recovered = set()
         for parent in (self.root / "stages", self.root / "generations", self.root / "current"):
@@ -215,7 +286,9 @@ class PublicationStore:
             for directory in parent.iterdir():
                 if directory.is_dir() and not directory.name.startswith("."):
                     try:
-                        recovered.add(_read_generation(directory).generation_id)
+                        generation = _read_generation(directory)
+                        self._validate(generation)
+                        recovered.add(generation.generation_id)
                     except (OSError, ValueError, KeyError, json.JSONDecodeError):
                         continue
         return tuple(sorted(recovered))
@@ -225,6 +298,7 @@ class PublicationStore:
             generation = _read_generation(self._generation_path(generation_id))
         except OSError as error:
             raise KeyError(generation_id) from error
+        self._validate(generation)
         snapshot = generation.snapshot
         if (snapshot.project_id, snapshot.repository_id, snapshot.snapshot_id) != (project_id, repository_id, snapshot_id):
             raise KeyError(generation_id)
@@ -235,13 +309,18 @@ class PublicationStore:
             value = json.loads(self._current_path(project_id, repository_id).read_bytes())
         except OSError as error:
             raise KeyError((project_id, repository_id)) from error
-        return GenerationRef(SnapshotRef(**value["snapshot"]), value["generation_id"], value["artifact_digest"])
+        reference = GenerationRef(SnapshotRef(**value["snapshot"]), value["generation_id"], value["artifact_digest"])
+        if (reference.snapshot.project_id, reference.snapshot.repository_id) != (project_id, repository_id):
+            raise PublicationValidationError("current pointer repository mismatch")
+        self.open_generation(reference)
+        return reference
 
     def open_generation(self, reference: GenerationRef) -> GraphGeneration:
         try:
             generation = _read_generation(self._generation_path(reference.generation_id))
         except OSError as error:
             raise KeyError(reference.generation_id) from error
+        self._validate(generation)
         if _generation_ref(generation) != reference:
-            raise KeyError(reference.generation_id)
+            raise PublicationValidationError("generation reference mismatch")
         return generation
