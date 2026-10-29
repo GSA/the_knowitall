@@ -1,10 +1,12 @@
 # Current state
 
-`regc` implementation and conformance/documentation are committed through
-`940103f`. Native branch review job 326 (range d5ab267..0c2f5cd) is queued behind
-shared daemon work; the subsequent malformed-pointer fix needs review coverage
-before PR delivery. Kata remains open; push/PR and plan cleanup await review.
-Latest completed full run: 160 passed with real pinned Python/TypeScript extraction enabled.
+`regc` implementation and recovery fixes are committed through `321ef02`.
+Native branch review job 359 passes with no findings. Final verification:
+181 tests passed with real pinned Python/TypeScript extraction enabled.
+Recovered request, generation, pointer, receipt and initialization directory
+renames are persisted before acknowledgment or successor selection. Missing
+selected evidence fails closed; explicit unpublished-intent resubmission is safe.
+Forge PR delivery follows the verified branch review.
 Contract examples, wheel/sdist (private-state exclusion), compileall and diff
 checks pass. Real partial-coverage and spawned-process extraction-death tests pass.
 
