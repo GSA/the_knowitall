@@ -29,6 +29,7 @@ class SnapshotManifest:
     content_manifest_digest: str
     cleanliness: str
     dirty_content_digest: str | None
+    origin: str | None
     included: tuple[InventoryEntry, ...]
     excluded: tuple[dict[str, str], ...]
     failed: tuple[dict[str, str], ...] = ()
@@ -74,7 +75,8 @@ def _dirty_inventory(repo: Path, included: tuple[InventoryEntry, ...], excluded:
             target = repo / path
             if target.is_file() and not target.is_symlink():
                 data = target.read_bytes()
-                entries[path] = InventoryEntry(path, "sha256:" + hashlib.sha256(data).hexdigest(), data)
+                mode = "100755" if target.stat().st_mode & 0o111 else "100644"
+                entries[path] = InventoryEntry(path, "sha256:" + hashlib.sha256(data).hexdigest(), data, mode)
             else:
                 entries.pop(path, None)
         else:
@@ -91,22 +93,25 @@ def _dirty_inventory(repo: Path, included: tuple[InventoryEntry, ...], excluded:
         target = repo / path
         if policy.untracked_files == "include" and target.is_file() and not target.is_symlink():
             data = target.read_bytes()
-            entries[path] = InventoryEntry(path, "sha256:" + hashlib.sha256(data).hexdigest(), data)
+            mode = "100755" if target.stat().st_mode & 0o111 else "100644"
+            entries[path] = InventoryEntry(path, "sha256:" + hashlib.sha256(data).hexdigest(), data, mode)
         else:
             exclusions.append({"path": path, "reason": "dirty_untracked_excluded"})
     return tuple(sorted(entries.values(), key=lambda item: item.path.encode())), tuple(sorted(exclusions, key=lambda item: item["path"].encode()))
 
 
-def create_snapshot(repo: Path, project_id: str, repository_id: str, destination: Path, policy: SnapshotPolicy) -> SnapshotManifest:
+def create_snapshot(repo: Path, project_id: str, repository_id: str, destination: Path, policy: SnapshotPolicy, *, origin: str | None = None) -> SnapshotManifest:
     if not project_id or not repository_id:
         raise ValueError("project and repository identities must be nonempty")
+    commit = commit_identity(repo)
+    initial_status = status_entries(repo)
     tracked, untracked = _status(repo)
     dirty = bool(tracked or untracked)
     if dirty and policy.dirty != "admit":
         raise ValueError("dirty Git input rejected by policy")
-    commit = commit_identity(repo)
+    commit_oid = commit.split(":", 1)[1]
     try:
-        included, excluded = clean_inventory(repo)
+        included, excluded = clean_inventory(repo, commit_oid)
         failed: tuple[dict[str, str], ...] = ()
         inventory_complete = True
     except GitError:
@@ -117,11 +122,11 @@ def create_snapshot(repo: Path, project_id: str, repository_id: str, destination
         inventory_complete = False
     if dirty and inventory_complete:
         included, excluded = _dirty_inventory(repo, included, excluded, policy, tracked, untracked)
-    content_bytes = b"".join(entry.path.encode() + b"\0" + entry.content_digest.encode() + b"\0" for entry in included)
+    content_bytes = b"".join(entry.path.encode() + b"\0" + entry.mode.encode() + b"\0" + entry.content_digest.encode() + b"\0" for entry in included)
     content_digest = "sha256:" + hashlib.sha256(content_bytes).hexdigest()
     dirty_digest = "sha256:" + hashlib.sha256(status_entries(repo) + content_bytes).hexdigest() if dirty else None
     snapshot_id = "snap-" + _identity(project_id, repository_id, commit, content_digest, dirty_digest or "", policy.submodules, policy.lfs)
-    manifest = SnapshotManifest(project_id, repository_id, snapshot_id, commit, content_digest, "dirty" if dirty else "clean", dirty_digest, included, excluded, failed, inventory_complete)
+    manifest = SnapshotManifest(project_id, repository_id, snapshot_id, commit, content_digest, "dirty" if dirty else "clean", dirty_digest, origin, included, excluded, failed, inventory_complete)
     manifest_bytes = manifest.canonical()
     target = destination / snapshot_id
     if target.exists():
@@ -136,7 +141,10 @@ def create_snapshot(repo: Path, project_id: str, repository_id: str, destination
             output = source / entry.path
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_bytes(entry.data)
+            output.chmod(0o755 if entry.mode == "100755" else 0o644)
         (temporary / "manifest.json").write_bytes(manifest_bytes)
+        if commit_identity(repo) != commit or status_entries(repo) != initial_status:
+            raise ValueError("repository changed during snapshot")
         os.replace(temporary, target)
     finally:
         if temporary.exists():

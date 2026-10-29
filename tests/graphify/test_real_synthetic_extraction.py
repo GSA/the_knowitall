@@ -1,10 +1,9 @@
-import hashlib
 import os
 from pathlib import Path
 
 import pytest
 
-from knowitall_graphify import GraphifyConfig, GraphifyExecutionError, executable_digest, extract_generation, run_graphify
+from knowitall_graphify import GraphifyConfig, GraphifyExecutionError, executable_digest, expected_generation_id, extract_generation, run_graphify
 from knowitall_snapshot import SnapshotPolicy, create_snapshot
 
 
@@ -62,5 +61,4 @@ def test_real_pinned_extraction_is_offline_source_bound_and_deterministic(make_r
     assert "tree-sitter-typescript:0.23.2" in first.runtime_identity
     assert first.config_identity.startswith("sha256:")
     assert first.model_routes_enabled is False
-    identity = "\0".join((snapshot.snapshot_id, first.artifact_digest, first.engine_identity, first.runtime_identity, first.config_identity))
-    assert first.generation_id == "gen-" + hashlib.sha256(identity.encode()).hexdigest()
+    assert first.generation_id == expected_generation_id(first)
