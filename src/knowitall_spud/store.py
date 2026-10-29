@@ -234,13 +234,14 @@ class AdmissionStore:
                 source_coverage=receipt_value["source_coverage"],
                 limitations=tuple(tuple(item) for item in receipt_value["limitations"]),
             )
+            recomputed = _receipt(bundle)
         except AdmissionValidationError:
             raise
         except (AttributeError, KeyError, TypeError, ValueError) as error:
             raise AdmissionValidationError(
                 f"retained bundle at {directory.name} has unusable metadata"
             ) from error
-        if receipt != _receipt(bundle):
+        if receipt != recomputed:
             raise AdmissionValidationError(f"receipt does not match retained bundle {receipt.bundle_id!r}")
         return bundle, receipt
 

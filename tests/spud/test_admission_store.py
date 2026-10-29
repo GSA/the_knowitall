@@ -325,3 +325,18 @@ def test_undecodable_pointer_bytes_are_absence_not_a_crash(tmp_path, admitted_bu
     assert store.list_bundles("project-a", "repo-a") == ()
     assert store.damaged_bundles() == ()
     assert store.recover() == ()
+
+
+def test_metadata_with_a_null_artifact_path_is_reported_as_damage(tmp_path, admitted_bundle):
+    store, bundle, receipt = admitted_bundle()
+    path = metadata_path(store)
+    value = json.loads(path.read_bytes())
+    value["artifacts"][0]["path"] = None
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(AdmissionValidationError):
+        store.open_bundle("project-a", "repo-a", "bundle-1")
+    assert store.damaged_bundles() == (("project-a", "repo-a", "bundle-1"),)
+
+    store.discard_damaged("project-a", "repo-a", "bundle-1")
+    assert store.admit(bundle) == receipt
