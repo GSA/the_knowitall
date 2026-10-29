@@ -235,13 +235,20 @@ def resolve_artifacts(
         else:
             articles = legacy
         selected = [SelectedArtifact("article", path) for path in articles]
-        for role, path in (
+        candidates = [
             ("graph", GRAPH_PATH),
             ("graph_report", GRAPH_REPORT_PATH),
             ("citation_index", CITATION_INDEX_PATH),
             ("okf_manifest", OKF_MANIFEST_PATH),
             ("run_manifest", RUN_MANIFEST_PATH),
-        ):
+        ]
+        bound_manifest = (value.source_binding or {}).get("content_manifest_path")
+        if isinstance(bound_manifest, str) and bound_manifest:
+            try:
+                candidates.append(("source_evidence", safe_relative_path(bound_manifest)))
+            except ArtifactError as error:
+                raise DescriptorError(str(error)) from error
+        for role, path in candidates:
             if _present(bundle_root, path):
                 selected.append(SelectedArtifact(role, path))
 
