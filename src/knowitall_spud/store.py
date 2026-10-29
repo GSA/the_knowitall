@@ -218,7 +218,7 @@ class AdmissionStore:
                 "sha256:" + path.name: path.read_bytes()
                 for path in sorted((directory / "artifacts").iterdir())
             }
-        except (OSError, json.JSONDecodeError) as error:
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise AdmissionValidationError(f"retained bundle at {directory.name} cannot be read") from error
         try:
             bundle = _decode_bundle(metadata, payloads)
@@ -311,7 +311,7 @@ class AdmissionStore:
         pointer = self._pointer_path(project_id, repository_id, bundle_id)
         try:
             value = json.loads(pointer.read_bytes())
-        except (OSError, json.JSONDecodeError) as error:
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise KeyError((project_id, repository_id, bundle_id)) from error
         read = _read_pointer(value)
         if read is None or read[0] != (project_id, repository_id, bundle_id):
@@ -335,7 +335,7 @@ class AdmissionStore:
                 continue
             try:
                 value = json.loads(pointer.read_bytes())
-            except (OSError, json.JSONDecodeError):
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
                 continue
             read = _read_pointer(value)
             if read is not None and read[0][:2] == (project_id, repository_id):
@@ -356,7 +356,7 @@ class AdmissionStore:
                     continue
                 try:
                     value = json.loads(pointer.read_bytes())
-                except (OSError, json.JSONDecodeError):
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
                     continue  # a damaged pointer names nothing; enumeration continues
                 read = _read_pointer(value)
                 if read is not None:

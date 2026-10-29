@@ -183,10 +183,16 @@ def _strip_comment(line: str) -> str | None:
 
 
 def _scalar(value: str) -> str | None:
-    """Read one flat scalar, or None for syntax the reader cannot represent."""
+    """Read one flat scalar, or None for syntax the reader cannot represent.
+
+    Single quotes are unescaped; a double-quoted scalar carrying backslash
+    escape syntax is skipped rather than returned with the escapes intact.
+    """
     if len(value) >= 2 and value[0] in "'\"" and value[-1] == value[0]:
         inner = value[1:-1]
-        return inner.replace("''", "'") if value[0] == "'" else inner
+        if value[0] == "'":
+            return inner.replace("''", "'")
+        return None if "\\" in inner else inner
     if value[0] in "{[&*!|>'\"":
         return None
     return value
