@@ -1,8 +1,10 @@
 # Current state
 
-`regc` implementation and recovery fixes are committed through `321ef02`.
-Native branch review job 359 passes with no findings. Final verification:
-181 tests passed with real pinned Python/TypeScript extraction enabled.
+`regc` implementation and recovery fixes are integrated with latest `main`
+through merge `9286086`. Native branch review job 366 passes with no findings.
+Merge verification: 203 tests passed with real pinned Python/TypeScript extraction
+enabled; contract examples, build, compileall and diff checks pass. Update requests
+now bind executable modes; checkpoints use metadata-bound generation identities.
 Recovered request, generation, pointer, receipt and initialization directory
 renames are persisted before acknowledgment or successor selection. Missing
 selected evidence fails closed; explicit unpublished-intent resubmission is safe.
@@ -21,4 +23,5 @@ Graphify may emit sourceless non-AST targets for removed still-called symbols;
 these artifacts are rejected while prior current evidence remains selected.
 `the_knowitall#d2qt` owns deployment-provided runtime attestation.
 
-Concurrent `.kata.toml` project-name rename remains outside this task's commits.
+The pre-existing `.kata.toml` rename was preserved across the merge; latest
+`main` supplies the identical binding, leaving no unrelated working-tree diff.
