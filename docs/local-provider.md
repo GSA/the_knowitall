@@ -34,6 +34,24 @@ not host, loader, or filesystem attestation, and it is not a production
 runtime-integrity claim; see
 [`graphify-dependency.md`](graphify-dependency.md).
 
+## Authorized repository intake
+
+The library accepts either an explicitly supplied local Git checkout through
+`create_snapshot(...)` or one explicitly configured remote through
+`acquire_remote(origin, destination)`. Remote acquisition clones without tags
+or submodules, or fetches and hard-resets an existing dedicated checkout to
+`origin/HEAD`; it never discovers repositories. Interactive prompting and Git
+credential helpers are disabled, and origins containing embedded credentials
+are rejected. Callers provide stable project and repository IDs separately;
+checkout paths and origin URLs are provenance, not identity.
+
+Snapshot materialization reads committed blobs with hook-disabled Git, rejects
+dirty input by default, preserves regular-file executable modes, records
+symlink/submodule/LFS and inventory limitations, and publishes only by an atomic
+rename after the complete manifest and source tree exist. Real repository
+allowlists, credentials, retention, and storage locations require separate
+approval; the synthetic tests do not contact a network.
+
 ## Offline verification
 
 From the repository root, with isolated dependencies available on `PYTHONPATH`:
