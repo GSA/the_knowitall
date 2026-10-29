@@ -52,6 +52,30 @@ def test_changed_runtime_cannot_resume_acknowledged_request(generation_factory, 
         instance.resume("a")
 
 
+@pytest.mark.parametrize("name", ["artifact.bin", "metadata.json", "metadata.sha256"])
+def test_missing_current_evidence_blocks_extraction_from_empty_predecessor(generation_factory, tmp_path, monkeypatch, name):
+    from knowitall_publication import PublicationValidationError
+    import knowitall_updates.runner as module
+
+    generation, snapshot = generation_factory()
+    instance = runner(tmp_path, monkeypatch, generation)
+    store = instance.ledger.store
+    store.publish(store.stage(generation))
+    pointer = next((store.root / "current").iterdir())
+    original = pointer.read_bytes()
+    next((store.root / "generations").glob("*/" + name)).unlink()
+    instance.submit("empty-predecessor", snapshot, expected_current=None)
+    monkeypatch.setattr(module, "extract_generation", lambda *args: pytest.fail("missing selected evidence must block extraction"))
+
+    with pytest.raises(PublicationValidationError):
+        instance.resume("empty-predecessor")
+    status = instance.ledger.inspect("empty-predecessor")
+    assert status.phase == "requested"
+    assert status.reasons == ((".", "PublicationValidationError"),)
+    assert not (instance.ledger.root / "workspace").exists()
+    assert pointer.read_bytes() == original
+
+
 @pytest.mark.parametrize("failpoint", ["after_checkpoint", "after_stage", "before_current_replace", "after_current_replace"])
 def test_repeated_resume_reconciles_interrupted_publication(generation_factory, tmp_path, monkeypatch, failpoint):
     from knowitall_publication import PublicationInterrupted

@@ -190,9 +190,11 @@ class PublicationStore:
                 value = json.loads(prior_intent.read_bytes())
                 if value["target"] != asdict(current):
                     raise PublicationValidationError("publication intent target mismatch")
+                _fsync_directory(self.root / "current")
                 atomic_write(prior_receipt, (json.dumps(asdict(current), sort_keys=True, separators=(",", ":")) + "\n").encode())
         intent_path = self.root / "intents" / _key(generation.generation_id)
         if current == reference and intent_path.exists():
+            _fsync_directory(self.root / "current")
             atomic_write(receipt_path, pointer)
             return receipt
         if expected_current is not _UNSPECIFIED and current != expected_current:
@@ -338,7 +340,10 @@ class PublicationStore:
             raise PublicationValidationError("invalid current pointer") from error
         if (reference.snapshot.project_id, reference.snapshot.repository_id) != (project_id, repository_id):
             raise PublicationValidationError("current pointer repository mismatch")
-        self.open_generation(reference)
+        try:
+            self.open_generation(reference)
+        except KeyError as error:
+            raise PublicationValidationError("current pointer references missing generation evidence") from error
         return reference
 
     def open_generation(self, reference: GenerationRef) -> GraphGeneration:
