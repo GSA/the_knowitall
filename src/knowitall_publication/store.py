@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from functools import wraps
 
+from . import durable
 from .durable import atomic_write, durable_directory, locked
 
 _UNSPECIFIED = object()
@@ -178,6 +179,9 @@ class PublicationStore:
             if receipt_path.read_bytes() != pointer:
                 raise PublicationValidationError("publication receipt mismatch")
             self.open_generation(reference)
+            # The receipt rename may be visible after an interrupted atomic write.
+            # Persist it before acknowledging a retry, even after current advances.
+            durable.fsync_directory(self.root / "receipts")
             return receipt
         try:
             current = self.resolve_current(generation.snapshot.project_id, generation.snapshot.repository_id)
