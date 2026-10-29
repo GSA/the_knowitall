@@ -1,0 +1,5 @@
+{
+  "contract": "knowitall.code-context/v1", "request_id": "req-42", "project_id": "project-synthetic", "repository_id": "repo-python-service",
+  "selector": {"mode": "exact", "snapshot_id": "snap-python-0001", "generation_id": "gen-python-0001", "freshness": "allow_historical"},
+  "query": {"kind": "dependencies", "symbol_id": "python:src/orders.py:submit_order", "direction": "outgoing", "relationship_kinds": ["calls", "imports"]}
+}
