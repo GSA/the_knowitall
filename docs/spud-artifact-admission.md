@@ -106,7 +106,11 @@ the `unbound_commit_evidence` limitation: matching digests and paths never
 establish a commit identity. One binding names one graph digest, so a bundle
 retaining more than one graph keeps the `ambiguous_bound_graph` limitation
 rather than extending a verified binding to an unverified graph. A
-bare `commit_sha` is always only `asserted`. Source coverage stays `unknown`
+bare `commit_sha` is always only `asserted`. A supplied binding is retained as
+`supplied_binding` and hashed into the receipt whether or not it verified, kept
+separate from the verified `bound_snapshot`, so two different rejected
+assertions never normalize alike and a later reader can still see which commit
+the caller claimed. Source coverage stays `unknown`
 unless a verified binding supplies exactly `complete` or `partial`; any other
 supplied value is not a coverage statement and leaves coverage `unknown`.
 
@@ -146,7 +150,9 @@ receipt; changed bytes, changed metadata or an added companion raises
 `AdmissionConflict` and requires a new `bundle_id`. An interrupted admission is
 never queryable, and a corrupted artifact raises `AdmissionValidationError` with
 a digest mismatch on read-back rather than answering from damaged evidence.
-`recover()` reclaims interrupted staging and unreferenced directories;
+Admission, recovery and discard hold an exclusive lock on the store
+(`root/.lock`), so reclamation never removes evidence an in-flight admission is
+about to acknowledge. `recover()` reclaims interrupted staging and unreferenced directories;
 `damaged_bundles()` reports referenced bundles whose evidence cannot be read,
 and `discard_damaged()` removes one so its `bundle_id` can be re-admitted.
 Damage is never repaired by inference and a readable bundle is never discarded.

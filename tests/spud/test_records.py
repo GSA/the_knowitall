@@ -527,3 +527,29 @@ def test_a_multiline_commit_scalar_is_not_an_asserted_commit(make_bundle):
     bundle = normalize(*make_bundle(run_manifest={"commit_sha": "aaaa\n  bbbb"}))
 
     assert bundle.revision_binding == "unknown"
+
+
+def test_an_unverified_binding_assertion_is_retained_as_supplied_provenance(make_bundle):
+    binding = {"commit_sha": "4" * 40, "graph_digest": "sha256:" + "0" * 64}
+    bundle_root, value = make_bundle(supplied={"generator_version": "spud c80837a"})
+    value["source_binding"] = binding
+
+    bundle = normalize(bundle_root, value)
+
+    assert (GRAPH_PATH, "unverified_source_binding") in bundle.limitations
+    assert bundle.revision_binding == "asserted"
+    assert bundle.bound_snapshot is None
+    # The unverified assertion stays visible, so a later reader can see which
+    # commit the caller claimed and that nothing verified it.
+    assert bundle.supplied_binding == binding
+    binding["commit_sha"] = "5" * 40
+    assert bundle.supplied_binding["commit_sha"] == "4" * 40
+
+
+def test_two_differing_unverified_binding_assertions_do_not_normalize_alike(make_bundle):
+    first_root, first = make_bundle(supplied={"generator_version": "spud c80837a"})
+    second_root, second = make_bundle(supplied={"generator_version": "spud c80837a"})
+    first["source_binding"] = {"commit_sha": "4" * 40, "graph_digest": "sha256:" + "0" * 64}
+    second["source_binding"] = {"commit_sha": "5" * 40, "graph_digest": "sha256:" + "0" * 64}
+
+    assert normalize(first_root, first) != normalize(second_root, second)
