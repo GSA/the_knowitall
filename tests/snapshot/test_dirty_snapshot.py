@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from knowitall_snapshot import SnapshotPolicy, create_snapshot
@@ -38,6 +36,39 @@ def test_explicit_dirty_policy_binds_included_working_bytes(make_repo, tmp_path)
     assert dirty.snapshot_id != create_snapshot(repo, "project", "repo", tmp_path / "other", SnapshotPolicy(dirty="admit")).snapshot_id
 
 
+def test_admitted_tracked_mode_change_is_preserved(make_repo, tmp_path):
+    repo = make_repo()
+    changed = repo / "src" / "orders.py"
+    changed.chmod(0o755)
+    policy = SnapshotPolicy(dirty="admit", tracked_changes="include")
+
+    snapshot = create_snapshot(repo, "project", "repo", tmp_path / "out", policy)
+
+    entry = next(item for item in snapshot.included if item.path == "src/orders.py")
+    assert entry.mode == "100755"
+    assert (tmp_path / "out" / snapshot.snapshot_id / "source" / "src" / "orders.py").stat().st_mode & 0o111
+
+
+def test_dirty_snapshot_aborts_when_admitted_bytes_change_during_capture(make_repo, tmp_path, monkeypatch):
+    repo = make_repo()
+    changed = repo / "src" / "orders.py"
+    changed.write_text("first dirty value\n", encoding="utf-8")
+    import knowitall_snapshot.materialize as materialize
+
+    real_inventory = materialize._dirty_inventory
+
+    def racing_inventory(*args):
+        inventory = real_inventory(*args)
+        changed.write_text("second dirty value\n", encoding="utf-8")
+        return inventory
+
+    monkeypatch.setattr(materialize, "_dirty_inventory", racing_inventory)
+
+    with pytest.raises(ValueError, match="repository changed during snapshot"):
+        create_snapshot(repo, "project", "repo", tmp_path / "out", SnapshotPolicy(dirty="admit", tracked_changes="include"))
+    assert not (tmp_path / "out").exists() or not any((tmp_path / "out").iterdir())
+
+
 def test_admitted_deleted_file_is_absent_from_snapshot(make_repo, tmp_path):
     repo = make_repo()
     (repo / "src" / "store.py").unlink()
@@ -63,6 +94,24 @@ def test_admitted_rename_removes_old_path_and_captures_new_path(make_repo, tmp_p
     paths = {entry.path for entry in snapshot.included}
     assert "src/store.py" not in paths
     assert "src/persistence.py" in paths
+
+
+def test_excluded_untracked_file_contents_are_not_read(make_repo, tmp_path, monkeypatch):
+    repo = make_repo()
+    excluded = repo / "unreadable.bin"
+    excluded.write_bytes(b"excluded")
+    original_read_bytes = type(excluded).read_bytes
+
+    def guarded_read_bytes(path):
+        if path == excluded:
+            raise PermissionError("excluded file must not be read")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(type(excluded), "read_bytes", guarded_read_bytes)
+
+    snapshot = create_snapshot(repo, "project", "repo", tmp_path / "out", SnapshotPolicy(dirty="admit"))
+
+    assert {"path": "unreadable.bin", "reason": "dirty_untracked_excluded"} in snapshot.excluded
 
 
 def test_dirty_policy_records_excluded_working_changes(make_repo, tmp_path):

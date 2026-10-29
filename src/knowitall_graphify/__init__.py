@@ -4,6 +4,7 @@ from .normalize import (
     GraphEdge,
     GraphGeneration,
     GraphNode,
+    expected_generation_id,
     extract_generation,
     normalize_generation,
 )
@@ -11,6 +12,6 @@ from .validate import validate_generation
 
 __all__ = [
     "ExecutionReceipt", "GenerationValidationError", "GraphEdge", "GraphGeneration",
-    "GraphNode", "GraphifyConfig", "GraphifyExecutionError", "executable_digest", "extract_generation", "normalize_generation",
+    "GraphNode", "GraphifyConfig", "GraphifyExecutionError", "executable_digest", "expected_generation_id", "extract_generation", "normalize_generation",
     "run_graphify", "validate_generation",
 ]
