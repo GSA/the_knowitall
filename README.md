@@ -59,6 +59,27 @@ run proves this bounded synthetic contract only: it is not validation against
 Acquire, authorization to ingest it, or evidence of production readiness,
 scale, availability or semantic completeness.
 
+## Optional SPUD technical-artifact admission
+
+`knowitall_spud` admits an already produced SPUD bundle as graded, queryable
+evidence in a separate `knowitall.spud-artifacts/v1` envelope, without adopting
+SPUD's pipeline. See
+[`docs/spud-artifact-admission.md`](docs/spud-artifact-admission.md) for the
+descriptor format, supported layouts, evidence grades, revision-binding values,
+limitation reasons and query kinds.
+
+| Path | Contents |
+| --- | --- |
+| `schemas/knowitall.spud-artifacts/v1/` | JSON Schemas for the artifact query request and response |
+| `examples/knowitall.spud-artifacts/v1/` | Schema-valid relationship request, success response and partial citation response |
+| `src/knowitall_spud/` | Descriptor validation, artifact retention, record normalization, admission store and query service |
+
+Admission reads retained files only: it never runs SPUD or Graphify, extracts an
+archive, opens a socket or a subprocess, or executes anything from a bundle.
+Missing companions, unknown producer versions, skipped uploads and unverified
+commit bindings stay explicit limitations, so admitting a bundle never claims
+SPUD ran locally, that the bundle is current, or that source scope was complete.
+
 ## Why this repository exists
 
 The original plan used SPUD for technical context alongside The Librarian and
@@ -244,20 +265,20 @@ text normalization; unreadable or over-budget inputs cannot silently succeed.
 
 ## Delivery and task authority
 
-Native Kata project: `knowitall`, bound by `.kata.toml`. Use
-`kata list --project knowitall` for current status; do not treat this document
+Native Kata project: `the_knowitall`, bound by `.kata.toml`. Use
+`kata list --project the_knowitall` for current status; do not treat this document
 as a competing progress ledger.
 
-Existing provider design `knowitall#vky6` moved from SPUD with its identity and
+Existing provider design `the_knowitall#vky6` moved from SPUD with its identity and
 history preserved. Code-context slices:
 
 | Kata | Scope |
 | --- | --- |
-| `knowitall#7gv8` | Repository intake and immutable snapshots |
-| `knowitall#r9gz` | Pinned Graphify integration |
-| `knowitall#8jvw` | Revision-bound queries/evidence packets |
-| `knowitall#regc` | Resumable updates and atomic publication |
-| `knowitall#axsf` | Optional SPUD technical-artifact admission |
+| `the_knowitall#7gv8` | Repository intake and immutable snapshots |
+| `the_knowitall#r9gz` | Pinned Graphify integration |
+| `the_knowitall#8jvw` | Revision-bound queries/evidence packets |
+| `the_knowitall#regc` | Resumable updates and atomic publication |
+| `the_knowitall#axsf` | Optional SPUD technical-artifact admission |
 
 Engineer coordinates the overall work under `engi-platform#pyzt`; memory
 runtime is `engi-platform#pbqn`, provider consumption is `engi-platform#k4mp`.

@@ -26,6 +26,7 @@ ARTIFACT_ROLES = (
     "okf_manifest",
     "run_manifest",
     "source_evidence",
+    "archive",
 )
 LAYOUTS = ("current", "legacy", "auto", "explicit")
 

@@ -32,7 +32,7 @@
         "artifacts": {"type": "array", "items": {
           "type": "object", "additionalProperties": false,
           "required": ["role", "path", "content_digest"],
-          "properties": {"role": {"enum": ["graph", "graph_report", "citation_index", "article", "okf_manifest", "run_manifest", "source_evidence"]}, "path": {"$ref": "#/$defs/path"}, "content_digest": {"$ref": "#/$defs/digest"}}
+          "properties": {"role": {"enum": ["graph", "graph_report", "citation_index", "article", "okf_manifest", "run_manifest", "source_evidence", "archive"]}, "path": {"$ref": "#/$defs/path"}, "content_digest": {"$ref": "#/$defs/digest"}}
         }},
         "source_coverage": {"enum": ["complete", "partial", "unknown"]},
         "limitations": {"type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/identity"}}}
