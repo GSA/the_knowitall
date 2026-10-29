@@ -247,6 +247,7 @@ class PublicationStore:
         if generation.model_routes_enabled:
             raise PublicationValidationError("model routes are disabled")
         try:
+            validate_graph(generation)
             raw = json.loads(generation.raw_artifact)
             canonical = "source_snapshot_id" in raw
             if canonical and raw["source_snapshot_id"] != generation.snapshot.snapshot_id:
@@ -256,7 +257,30 @@ class PublicationStore:
             actual = sorted((node.symbol_id, node.name, node.path) for node in generation.nodes)
             if expected != actual:
                 raise ValueError("normalized nodes disagree with raw artifact")
-            if len(raw.get("edges", [])) != len(generation.edges):
+            def locator(item):
+                if canonical:
+                    return SourceRange(*item["start"], *item["end"])
+                from knowitall_graphify.normalize import _native_range
+                if item.get("_origin") != "ast":
+                    raise ValueError("native evidence is not AST-bound")
+                return _native_range(item, "evidence")
+
+            nodes = {node.symbol_id: node for node in generation.nodes}
+            for item in native_nodes:
+                if nodes[item["id"]].source_range != locator(item):
+                    raise ValueError("normalized node locator disagrees with raw artifact")
+            expected_edges = []
+            for index, item in enumerate(raw.get("edges", [])):
+                if canonical:
+                    evidence_id = item["id"]
+                else:
+                    if item.get("confidence") != "EXTRACTED":
+                        raise ValueError("native edge is not extracted evidence")
+                    edge_key = json.dumps([item.get("source"), item.get("target"), item.get("relation"), item.get("source_file"), item.get("source_location"), index], separators=(",", ":"))
+                    evidence_id = "edge-" + hashlib.sha256(edge_key.encode()).hexdigest()
+                expected_edges.append((evidence_id, item["source"], item["target"], item["kind"] if canonical else item["relation"], item["path"] if canonical else item["source_file"], locator(item)))
+            actual_edges = [(edge.evidence_id, edge.source, edge.target, edge.kind, edge.path, edge.source_range) for edge in generation.edges]
+            if sorted(expected_edges) != sorted(actual_edges):
                 raise ValueError("normalized edges disagree with raw artifact")
             validate_graph(generation)
         except (ValueError, KeyError, TypeError) as error:
