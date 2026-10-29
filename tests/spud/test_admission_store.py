@@ -357,3 +357,16 @@ def test_a_new_index_directory_is_persisted_before_acknowledgement(tmp_path, adm
     synced.clear()
     target.admit(bundle)
     assert index_root not in synced
+
+
+def test_a_new_store_root_persists_every_created_ancestor(tmp_path, monkeypatch):
+    synced = []
+    monkeypatch.setattr(store_module, "_fsync_directory", lambda path: synced.append(Path(path)))
+    root = tmp_path / "outer" / "inner" / "store"
+
+    store = AdmissionStore(root)
+
+    assert store.root == root
+    for created in (tmp_path / "outer", tmp_path / "outer" / "inner", root, root / "bundles", root / "index"):
+        assert created.parent in synced, created
+    assert synced.index(tmp_path) < synced.index(tmp_path / "outer") < synced.index(root)

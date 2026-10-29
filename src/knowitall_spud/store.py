@@ -173,19 +173,19 @@ def _receipt(bundle: NormalizedBundle) -> AdmissionReceipt:
 class AdmissionStore:
     def __init__(self, root: Path):
         self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True, mode=_DIRECTORY_MODE)
-        created = False
+        missing = [path for path in (self.root, *self.root.parents) if not path.exists()]
+        for path in reversed(missing) if missing else ():
+            path.mkdir(mode=_DIRECTORY_MODE)
+            # A directory entry is durable only once its parent is persisted.
+            _fsync_directory(path.parent)
         for name in ("bundles", "index"):
             child = self.root / name
             if not child.exists():
                 child.mkdir(mode=_DIRECTORY_MODE)
-                created = True
+                _fsync_directory(self.root)
         for path in (self.root, self.root / "bundles", self.root / "index"):
             if stat.S_IMODE(path.stat().st_mode) != _DIRECTORY_MODE:
                 path.chmod(_DIRECTORY_MODE)
-        if created:
-            # A directory entry is durable only once its parent is persisted.
-            _fsync_directory(self.root)
 
     def _bundle_path(self, project_id: str, repository_id: str, bundle_id: str) -> Path:
         return self.root / "bundles" / _key(project_id, repository_id, bundle_id)
