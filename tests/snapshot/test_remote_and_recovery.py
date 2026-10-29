@@ -86,6 +86,37 @@ def test_acquired_symlink_repository_can_be_snapshotted_with_default_policy(make
     assert any(item["path"] == "orders-link.py" and item["reason"] == "symlink_excluded" for item in snapshot.excluded)
 
 
+def test_acquired_submodule_repository_can_be_snapshotted_with_default_policy(make_repo, tmp_path):
+    child = make_repo("typescript_client")
+    upstream = make_repo()
+    git(upstream, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(child), "vendor/client")
+    git(upstream, "commit", "-qm", "add submodule")
+    remote = tmp_path / "upstream.git"
+    git(upstream, "clone", "--bare", "-q", str(upstream), str(remote))
+
+    checkout = acquire_remote(str(remote), tmp_path / "checkout")
+    snapshot = create_snapshot(checkout.path, "project", "repository", tmp_path / "snapshots", SnapshotPolicy())
+
+    assert any(item["path"] == "vendor/client" and item["reason"] == "submodule_excluded" for item in snapshot.excluded)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="byte-valued symlink targets require POSIX")
+def test_acquired_non_utf8_symlink_can_be_snapshotted_with_default_policy(make_repo, tmp_path):
+    upstream = make_repo()
+    os.symlink(b"non-utf8-\xff", os.fsencode(upstream / "raw-link"))
+    git(upstream, "add", "raw-link")
+    git(upstream, "commit", "-qm", "add byte-valued symlink")
+    remote = tmp_path / "upstream.git"
+    git(upstream, "clone", "--bare", "-q", str(upstream), str(remote))
+
+    checkout = acquire_remote(str(remote), tmp_path / "checkout")
+    checkout = acquire_remote(str(remote), checkout.path)
+    snapshot = create_snapshot(checkout.path, "project", "repository", tmp_path / "snapshots", SnapshotPolicy())
+
+    assert os.readlink(os.fsencode(checkout.path / "raw-link")) == b"non-utf8-\xff"
+    assert any(item["path"] == "raw-link" and item["reason"] == "symlink_excluded" for item in snapshot.excluded)
+
+
 def test_remote_intake_rejects_credential_bearing_origins(tmp_path):
     with pytest.raises(ValueError, match="credentials"):
         acquire_remote("https://user:secret@example.invalid/repo.git", tmp_path / "checkout")
