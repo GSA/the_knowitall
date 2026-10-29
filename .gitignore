@@ -11,4 +11,5 @@ __pycache__/
 /.roborev.toml
 /.roborev/
 /.superpowers/
+/AGENTS.override.md
 
