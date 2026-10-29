@@ -460,3 +460,13 @@ def test_read_flat_yaml_preserves_hash_characters_inside_quoted_scalars():
         "bare": "value",
         "tags": "tag #1, plain",
     }
+
+
+def test_read_flat_yaml_skips_double_quoted_scalars_it_cannot_represent():
+    data = (
+        'title: "Release\\nnotes"\n'
+        'quoted: "say \\"hello\\""\n'
+        "plain: kept\n"
+    )
+
+    assert read_flat_yaml(data.encode("utf-8")) == {"plain": "kept"}
