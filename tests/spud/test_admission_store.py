@@ -1,6 +1,7 @@
 import hashlib
 import json
 import stat
+from dataclasses import replace
 
 import pytest
 
@@ -145,3 +146,63 @@ def test_store_paths_are_hash_derived_and_private(tmp_path, admitted_bundle, mak
         assert stat.S_IMODE(path.stat().st_mode) == 0o700
     names = {path.name for path in (store.root / "bundles").iterdir()}
     assert all(len(name) == 64 and all(char in "0123456789abcdef" for char in name) for name in names)
+
+
+def test_admit_rejects_an_artifact_whose_digest_does_not_match_its_bytes(tmp_path, admitted_bundle):
+    store, bundle, _receipt = admitted_bundle(admit=False)
+    artifacts = tuple(
+        replace(item, content_digest="sha256:" + "0" * 64) if item.role == "graph" else item
+        for item in bundle.artifacts
+    )
+
+    with pytest.raises(AdmissionValidationError, match="digest mismatch"):
+        store.admit(replace(bundle, artifacts=artifacts))
+
+    assert store.list_bundles("project-a", "repo-a") == ()
+
+
+def test_missing_retained_artifact_is_reported_as_validation_failure(tmp_path, admitted_bundle):
+    store, _bundle, _receipt = admitted_bundle()
+    target = next(path for path in (store.root / "bundles").rglob("artifacts/*") if path.is_file())
+    target.unlink()
+
+    with pytest.raises(AdmissionValidationError, match="missing retained artifact"):
+        store.open_bundle("project-a", "repo-a", "bundle-1")
+
+
+def test_readmitting_over_an_unreadable_bundle_fails_loudly(tmp_path, admitted_bundle):
+    store, bundle, _receipt = admitted_bundle()
+    directory = next(path for path in (store.root / "bundles").iterdir() if path.is_dir())
+    (directory / "receipt.json").unlink()
+
+    with pytest.raises(AdmissionValidationError, match="cannot be read"):
+        store.admit(bundle)
+
+
+def test_retained_files_are_owner_readable_only(tmp_path, admitted_bundle):
+    store, _bundle, _receipt = admitted_bundle()
+
+    files = [path for path in store.root.rglob("*") if path.is_file()]
+    assert files
+    for path in files:
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_tampered_pointer_cannot_escape_the_bundle_directory(tmp_path, admitted_bundle):
+    store, _bundle, _receipt = admitted_bundle()
+    pointer = next(path for path in (store.root / "index").rglob("*") if path.is_file())
+    pointer.write_bytes(json.dumps({"bundle_id": "bundle-1", "bundle_key": "../../../etc"}).encode())
+
+    with pytest.raises(KeyError):
+        store.open_bundle("project-a", "repo-a", "bundle-1")
+
+
+def test_recover_reports_healthy_bundles_and_removes_unreferenced_directories(tmp_path, admitted_bundle):
+    store, _bundle, _receipt = admitted_bundle()
+    orphan = store.root / "bundles" / ("a" * 64)
+    orphan.mkdir()
+    (orphan / "metadata.json").write_bytes(b"{}")
+
+    assert store.recover() == ("bundle-1",)
+    assert not orphan.exists()
+    assert store.open_bundle("project-a", "repo-a", "bundle-1")[1].bundle_id == "bundle-1"

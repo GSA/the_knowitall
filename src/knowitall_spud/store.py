@@ -8,9 +8,11 @@ hashes of the caller's identity, never from caller-supplied names.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import tempfile
@@ -24,6 +26,8 @@ from .records import ArtifactRecord, Locator, NormalizedBundle, SourceReference
 FAILPOINTS = ("before_persist", "after_persist", "before_pointer")
 
 _DIRECTORY_MODE = 0o700
+_FILE_MODE = 0o600
+_BUNDLE_KEY_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 class AdmissionConflict(ValueError):
@@ -69,7 +73,8 @@ def _fsync_directory(path: Path) -> None:
 
 
 def _write_file(path: Path, data: bytes) -> None:
-    with path.open("xb") as output:
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, _FILE_MODE)
+    with os.fdopen(descriptor, "wb") as output:
         output.write(data)
         output.flush()
         os.fsync(output.fileno())
@@ -106,6 +111,8 @@ def _decode_bundle(value: dict[str, object], payloads: dict[str, bytes]) -> Norm
     artifacts = []
     for item in value["artifacts"]:
         digest = item["content_digest"]
+        if digest not in payloads:
+            raise AdmissionValidationError(f"missing retained artifact {item['path']!r}")
         data = payloads[digest]
         if content_digest(data) != digest:
             raise AdmissionValidationError(f"retained artifact {item['path']!r} digest mismatch")
@@ -182,6 +189,8 @@ class AdmissionStore:
         if failpoint == "before_persist":
             raise AdmissionInterrupted("before_persist")
         for item in bundle.artifacts:
+            if content_digest(item.data) != item.content_digest:
+                raise AdmissionValidationError(f"retained artifact {item.path!r} digest mismatch")
             target = artifacts / item.content_digest.removeprefix("sha256:")
             if not target.exists():
                 _write_file(target, item.data)
@@ -193,14 +202,17 @@ class AdmissionStore:
         _fsync_directory(directory)
 
     def _read(self, directory: Path) -> tuple[NormalizedBundle, AdmissionReceipt]:
+        if not directory.is_dir():
+            raise KeyError(str(directory))
         try:
             metadata = json.loads((directory / "metadata.json").read_bytes())
             receipt_value = json.loads((directory / "receipt.json").read_bytes())
+            payloads = {
+                "sha256:" + path.name: path.read_bytes()
+                for path in sorted((directory / "artifacts").iterdir())
+            }
         except (OSError, json.JSONDecodeError) as error:
-            raise KeyError(str(directory)) from error
-        payloads = {}
-        for path in sorted((directory / "artifacts").iterdir()):
-            payloads["sha256:" + path.name] = path.read_bytes()
+            raise AdmissionValidationError(f"retained bundle at {directory.name} cannot be read") from error
         bundle = _decode_bundle(metadata, payloads)
         receipt = AdmissionReceipt(
             project_id=receipt_value["project_id"],
@@ -267,7 +279,9 @@ class AdmissionStore:
             self._stage(temporary / "bundle", bundle, receipt, failpoint)
             try:
                 os.rename(temporary / "bundle", destination)
-            except OSError:
+            except OSError as error:
+                if error.errno not in {errno.EEXIST, errno.ENOTEMPTY}:
+                    raise
                 self._compare(destination, bundle)
             _fsync_directory(self.root / "bundles")
         finally:
@@ -283,9 +297,10 @@ class AdmissionStore:
             value = json.loads(pointer.read_bytes())
         except (OSError, json.JSONDecodeError) as error:
             raise KeyError((project_id, repository_id, bundle_id)) from error
-        if value.get("bundle_id") != bundle_id:
+        key = value.get("bundle_key")
+        if value.get("bundle_id") != bundle_id or not isinstance(key, str) or not _BUNDLE_KEY_PATTERN.match(key):
             raise KeyError((project_id, repository_id, bundle_id))
-        bundle, receipt = self._read(self.root / "bundles" / value["bundle_key"])
+        bundle, receipt = self._read(self.root / "bundles" / key)
         if (bundle.project_id, bundle.repository_id, bundle.bundle_id) != (project_id, repository_id, bundle_id):
             raise KeyError((project_id, repository_id, bundle_id))
         return bundle, receipt
@@ -334,6 +349,6 @@ class AdmissionStore:
             try:
                 self._read(directory)
             except (KeyError, AdmissionValidationError):
-                continue
+                continue  # referenced but unreadable: keep the evidence for an operator to inspect
             recovered.add(referenced[directory.name])
         return tuple(sorted(recovered))
