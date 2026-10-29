@@ -21,7 +21,7 @@ from jsonschema import Draft202012Validator
 
 from knowitall_query.continuation import InvalidContinuation, issue_token, read_token
 
-from .records import ArtifactRecord, NormalizedBundle
+from .records import SUPPLIED_SCOPE, ArtifactRecord, NormalizedBundle
 from .store import AdmissionStore, AdmissionValidationError
 
 
@@ -70,10 +70,11 @@ def validate_artifact_response(
         raise ArtifactQueryValidationError("document: response must be a mapping")
     _validate_schema(value, "artifact-query-response.schema.json")
     if value["status"] == "partial":
-        if not value["missing_evidence"]:
+        missing = value["missing_evidence"]
+        if not missing:
             raise ArtifactQueryValidationError("missing_evidence: required for partial status")
-        if not value["admission"]["limitations"]:
-            raise ArtifactQueryValidationError("admission.limitations: required for partial status")
+        if not value["admission"]["limitations"] and any(item["kind"] != "coverage" for item in missing):
+            raise ArtifactQueryValidationError("admission.limitations: required for reported limitations")
     if value["status"] in {"ok", "partial", "not_found"} and value["resolved"] is None:
         raise ArtifactQueryValidationError("resolved: required unless the bundle is unavailable")
     if expected_request is not None:
@@ -82,8 +83,12 @@ def validate_artifact_response(
                 raise ArtifactQueryValidationError(f"{identity}: identity mismatch with request")
 
 
-def _missing_evidence(limitations: tuple[tuple[str, str], ...]) -> list[dict[str, str]]:
+def _missing_evidence(bundle: NormalizedBundle) -> list[dict[str, str]]:
+    """Report admission limitations, and declared partial coverage, as missing evidence."""
     found = []
+    if bundle.source_coverage == "partial":
+        found.append({"kind": "coverage", "scope": SUPPLIED_SCOPE, "reason": "partial_source_coverage"})
+    limitations = bundle.limitations
     for scope, reason in limitations:
         if reason in _BINDING_REASONS:
             kind = "binding"
@@ -197,7 +202,7 @@ class ArtifactQueryService:
                 record.record_id,
             ),
         )
-        missing = _missing_evidence(bundle.limitations)
+        missing = _missing_evidence(bundle)
         if missing:
             status = "partial"
         elif selected:

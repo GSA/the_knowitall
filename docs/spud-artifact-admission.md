@@ -34,7 +34,7 @@ any of them. Descriptor version: `knowitall.spud-admission/v1`.
 | `artifacts` | Role/path selection; required for `explicit`, forbidden otherwise |
 | `supplied` | Caller-asserted provenance strings (for example `generator_version`, `commit_sha`) |
 | `expected_digests` | Optional `path -> sha256:<64 hex>` checks against retained bytes |
-| `declared_missing` | Caller-declared `(scope, reason)` limitations, preserved verbatim |
+| `declared_missing` | Caller-declared `(scope, reason)` limitations, preserved verbatim; each reason must come from `LIMITATION_REASONS` |
 | `source_binding` | Optional binding of the graph to an exact snapshot (see below) |
 
 Paths must be bundle-relative and normal: absolute paths, `..` segments and
@@ -118,7 +118,10 @@ unless a verified binding supplies `complete` or `partial`.
 
 Limitations are never repaired by inference. They appear in the receipt, in
 `admission.limitations`, and as machine-readable `missing_evidence` entries
-classified as `artifact`, `binding` or `provenance`.
+classified as `artifact`, `binding`, `coverage` or `provenance`. Declared
+partial source coverage is reported as a `coverage` entry even when nothing
+else is limited, so a bundle covering part of the repository never answers a
+miss as absence.
 
 ## Admission store and receipts
 
@@ -147,8 +150,8 @@ Each response names the resolved `bundle_id`, `receipt_digest`,
 `reader_profile`, `revision_binding` and `bound_snapshot`, the admitted
 artifacts with digests, source coverage and limitations. Status is explicit
 (`ok`, `partial`, `not_found`, `unavailable`, `invalid_request`): a bundle with
-any limitation answers `partial`, so an incomplete bundle can never be read as
-repository-wide absence. Pages are bounded at 50 records by default with a
+any limitation, or declared partial source coverage, answers `partial`, so an
+incomplete bundle can never be read as repository-wide absence. Pages are bounded at 50 records by default with a
 visible `continuation` token bound to the bundle receipt, the query and the page
 size; replaying a token against a different bundle, query or page size is
 `invalid_request`.
