@@ -190,7 +190,11 @@ class PublicationStore:
         if current is not None:
             prior_intent = self.root / "intents" / _key(current.generation_id)
             prior_receipt = self.root / "receipts" / _key(current.generation_id)
-            if prior_intent.exists() and not prior_receipt.exists():
+            if prior_receipt.exists():
+                # A visible predecessor receipt may have an unsynchronized rename.
+                # Preserve its historical retry evidence before advancing current.
+                durable.fsync_directory(self.root / "receipts")
+            elif prior_intent.exists():
                 value = json.loads(prior_intent.read_bytes())
                 if value["target"] != asdict(current):
                     raise PublicationValidationError("publication intent target mismatch")
