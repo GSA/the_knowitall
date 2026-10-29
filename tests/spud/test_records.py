@@ -242,3 +242,120 @@ def test_read_flat_yaml_ignores_unsupported_structures():
 
 def test_read_flat_yaml_rejects_undecodable_bytes():
     assert read_flat_yaml(b"\xff\xfe not utf8") == {}
+
+
+def bound_bundle(make_bundle, *, evidence=None, graph_override=None, binding_extra=None, **kwargs):
+    evidence = evidence if evidence is not None else {
+        "snapshot_id": "snapshot-1",
+        "files": [
+            {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
+            {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},
+        ],
+    }
+    bundle_root, value = make_bundle(source_evidence=evidence, graph_override=graph_override, **kwargs)
+    value["source_binding"] = {
+        "graph_digest": digest_of(bundle_root / GRAPH_PATH) if (bundle_root / GRAPH_PATH).exists() else "sha256:" + "0" * 64,
+        "snapshot_id": "snapshot-1",
+        "commit_sha": "1" * 40,
+        "content_manifest_digest": digest_of(bundle_root / SOURCE_EVIDENCE_PATH),
+        "content_manifest_path": SOURCE_EVIDENCE_PATH,
+        **(binding_extra or {}),
+    }
+    return normalize(bundle_root, value)
+
+
+def test_binding_is_not_bound_when_the_graph_was_never_parsed(make_bundle):
+    bundle = bound_bundle(make_bundle, graph_override="{not json")
+
+    assert bundle.revision_binding == "asserted"
+    assert bundle.bound_snapshot is None
+    assert (GRAPH_PATH, "unbound_graph_source_files") in bundle.limitations
+    assert (GRAPH_PATH, "malformed_graph_json") in bundle.limitations
+
+
+def test_binding_is_not_bound_when_a_graph_record_has_no_source_file(make_bundle):
+    edge = {key: item for key, item in GRAPH_EDGES[0].items() if key != "source_file"}
+    bundle = bound_bundle(make_bundle, graph_override={"nodes": GRAPH_NODES, "edges": [edge]})
+
+    assert bundle.revision_binding == "asserted"
+    assert (GRAPH_PATH, "unbound_graph_source_files") in bundle.limitations
+
+
+def test_binding_reports_uncovered_graph_source_files(make_bundle):
+    evidence = {"snapshot_id": "snapshot-1", "files": [{"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64}]}
+    bundle = bound_bundle(make_bundle, evidence=evidence)
+
+    assert bundle.revision_binding == "asserted"
+    assert (GRAPH_PATH, "unbound_graph_source_files") in bundle.limitations
+
+
+def test_binding_without_a_graph_artifact_reports_missing_bound_graph(make_bundle):
+    bundle = bound_bundle(make_bundle, graph=False)
+
+    assert bundle.revision_binding == "asserted"
+    assert (GRAPH_PATH, "missing_bound_graph") in bundle.limitations
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        {"snapshot_id": "other-snapshot", "files": []},
+        {"files": [{"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64}]},
+        {"snapshot_id": "snapshot-1", "files": "src/orders.py"},
+        {"snapshot_id": "snapshot-1", "files": [{"path": "src/orders.py", "content_digest": "abc"}]},
+    ],
+)
+def test_binding_rejects_unusable_content_manifest_evidence(make_bundle, evidence):
+    bundle = bound_bundle(make_bundle, evidence=evidence)
+
+    assert bundle.revision_binding == "asserted"
+    assert (GRAPH_PATH, "unverified_source_binding") in bundle.limitations
+
+
+@pytest.mark.parametrize("supplied_coverage", ["complete", "partial"])
+def test_source_coverage_follows_a_verified_binding(make_bundle, supplied_coverage):
+    bundle = bound_bundle(make_bundle, binding_extra={"source_coverage": supplied_coverage})
+
+    assert bundle.revision_binding == "bound"
+    assert bundle.source_coverage == supplied_coverage
+
+
+def test_placeholder_commit_metadata_stays_unknown(make_bundle):
+    bundle = normalize(*make_bundle(okf_manifest=False, supplied={}, run_manifest={"commit_sha": "unknown"}))
+
+    assert bundle.revision_binding == "unknown"
+    assert bundle.bound_snapshot is None
+
+
+def test_unparsable_or_inverted_source_location_stays_unknown(make_bundle):
+    nodes = [
+        {**GRAPH_NODES[0], "source_location": "L4-x"},
+        {**GRAPH_NODES[1], "source_location": "L10-2"},
+    ]
+    bundle = normalize(*make_bundle(graph_override={"nodes": nodes, "edges": []}))
+
+    for record in by_kind(bundle, "graph_symbol"):
+        assert (record.source_reference.start_line, record.source_reference.end_line) == (None, None)
+
+
+def test_malformed_and_invalid_citation_index_are_reported(make_bundle):
+    bundle_root, value = make_bundle(layout="explicit", citation_index=True)
+    (bundle_root / CITATION_INDEX_PATH).write_text("{not json", encoding="utf-8")
+    assert (CITATION_INDEX_PATH, "malformed_citation_index") in normalize(bundle_root, value).limitations
+
+    (bundle_root / CITATION_INDEX_PATH).write_text(json.dumps([{"norm_label": "x"}]), encoding="utf-8")
+    assert (CITATION_INDEX_PATH, "invalid_citation_records") in normalize(bundle_root, value).limitations
+
+    (bundle_root / CITATION_INDEX_PATH).write_text(json.dumps({"entries": []}), encoding="utf-8")
+    assert (CITATION_INDEX_PATH, "unsupported_citation_profile") in normalize(bundle_root, value).limitations
+
+
+def test_undecodable_narrative_and_unreadable_manifest_are_reported(make_bundle):
+    bundle_root, value = make_bundle(layout="explicit")
+    (bundle_root / GRAPH_REPORT_PATH).write_bytes(b"# Report\n\n\xff\xfe\n")
+    (bundle_root / RUN_MANIFEST_PATH).write_bytes(b"\xff\xfe not utf8")
+
+    bundle = normalize(bundle_root, value)
+
+    assert (GRAPH_REPORT_PATH, "undecodable_narrative_text") in bundle.limitations
+    assert (RUN_MANIFEST_PATH, "unreadable_manifest_fields") in bundle.limitations
