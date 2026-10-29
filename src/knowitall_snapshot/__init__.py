@@ -1,4 +1,4 @@
-from .acquire import AcquiredRepository, acquire_remote
+from .checkout import RemoteCheckout, checkout_remote
 from .materialize import SnapshotManifest, SnapshotPolicy, create_snapshot
 
-__all__ = ["AcquiredRepository", "SnapshotManifest", "SnapshotPolicy", "acquire_remote", "create_snapshot"]
+__all__ = ["RemoteCheckout", "SnapshotManifest", "SnapshotPolicy", "checkout_remote", "create_snapshot"]

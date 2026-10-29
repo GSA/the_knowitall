@@ -8,7 +8,7 @@ from .git import GitError, run_git
 
 
 @dataclass(frozen=True)
-class AcquiredRepository:
+class RemoteCheckout:
     path: Path
     origin: str
 
@@ -56,7 +56,7 @@ def _reset_local_config(destination: Path, origin: str, object_format: str) -> N
     _run("remote", "add", "origin", origin, cwd=destination)
 
 
-def acquire_remote(origin: str, destination: Path) -> AcquiredRepository:
+def checkout_remote(origin: str, destination: Path) -> RemoteCheckout:
     """Clone or refresh one explicitly configured remote without credential helpers or hooks."""
     normalized = _safe_origin(origin)
     destination = destination.resolve()
@@ -71,4 +71,4 @@ def acquire_remote(origin: str, destination: Path) -> AcquiredRepository:
     else:
         destination.parent.mkdir(parents=True, exist_ok=True)
         _run("clone", "--no-tags", "--no-recurse-submodules", normalized, str(destination))
-    return AcquiredRepository(destination, normalized)
+    return RemoteCheckout(destination, normalized)
