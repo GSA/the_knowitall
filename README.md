@@ -139,6 +139,44 @@ When an MCP adapter exists, it will wrap the same request and response format.
 Agents will then register it in Pi's `mcp.json` with the same pattern as
 The Librarian.
 
+## Importing SPUD artifacts (optional)
+
+`knowitall_spud` admits an already produced SPUD bundle (`graph.json`, reports,
+OKF/run manifests, citation indexes) as graded, queryable evidence under its own
+`knowitall.spud-artifacts/v1` contract. It does not adopt SPUD's pipeline: it
+only reads retained files, and never runs SPUD or Graphify, extracts an archive,
+opens a socket or subprocess, or executes anything from a bundle.
+
+```python
+import json
+from pathlib import Path
+from knowitall_spud import (
+    AdmissionStore, ArtifactQueryService, BundleLimits,
+    load_descriptor, normalize_bundle, read_bundle, resolve_artifacts,
+)
+
+root = Path(".local/spud-bundle").resolve()
+descriptor = load_descriptor(json.loads((root / "admission.json").read_text(encoding="utf-8")))
+limits = BundleLimits()
+selected, limitations = resolve_artifacts(root, descriptor, limits)
+retained = read_bundle(root, selected, limits, descriptor.expected_digests)
+
+store = AdmissionStore(Path(".local/spud-admission").resolve())
+receipt = store.admit(normalize_bundle(descriptor, retained, limitations))
+response = ArtifactQueryService(store).execute(request)
+```
+
+Each answer names the bundle, its receipt digest and the pinned `spud-reader/v1`
+profile, and states a revision binding of `unknown`, `asserted` or `bound`.
+Missing companions, unknown producer versions, skipped uploads, unverified
+commit metadata and incomplete source scope stay explicit limitations, so an
+admitted bundle never claims SPUD ran locally, that the bundle is current, or
+that source coverage was complete. Request and response formats live in
+[`schemas/knowitall.spud-artifacts/v1/`](schemas/knowitall.spud-artifacts/v1/)
+with examples in [`examples/`](examples/knowitall.spud-artifacts/v1/); see
+[docs/spud-artifact-admission.md](docs/spud-artifact-admission.md) for the
+descriptor format, layouts, evidence grades and limitation reasons.
+
 ## Rules
 
 - Keep cloned repos, snapshots, and graphs under `.local/`. Never commit them.
@@ -153,7 +191,6 @@ The Librarian.
 | `88nk` | `P1` | Handling of unresolved references (**blocks real repos**) |
 | `vz6q` | `P1` | MCP server for consumer agents |
 | `3p2d` | `P1` | Isolated MVP instance intake and publication across mirrored Falcon repos |
-| `axsf` | `P3` (`deferred`) | Optional import of SPUD artifacts |
 | `d2qt` | `P3` | Runtime integrity attestation |
 
 More detail: [docs/local-provider.md](docs/local-provider.md) and
