@@ -363,7 +363,9 @@ def test_a_new_index_directory_is_persisted_before_acknowledgement(tmp_path, adm
     assert synced.index(index_root) < synced.index(project_index)
     synced.clear()
     target.admit(bundle)
-    assert index_root not in synced
+    # An existing index directory may be a mkdir left by an interrupted
+    # admission, so its entry is persisted on republication too.
+    assert synced.index(index_root) < synced.index(project_index)
 
 
 def test_a_new_store_root_persists_every_created_ancestor(tmp_path, monkeypatch):
@@ -417,3 +419,38 @@ def test_a_changed_unverified_binding_assertion_conflicts(tmp_path, admitted_bun
     with pytest.raises(AdmissionConflict, match="different retained metadata"):
         store.admit(other)
     assert store.open_bundle("project-a", "repo-a", "bundle-1")[0].supplied_binding == binding
+
+
+def test_reopening_persists_directories_left_by_an_interrupted_initialization(tmp_path, monkeypatch):
+    root = tmp_path / "store"
+    for path in (root, root / "bundles", root / "index"):
+        path.mkdir(mode=0o700)  # mkdir without the parent fsync that follows it
+    synced = []
+    monkeypatch.setattr(store_module, "_fsync_directory", lambda path: synced.append(Path(path)))
+
+    AdmissionStore(root)
+
+    assert synced.count(root) >= 2
+    assert tmp_path in synced
+
+
+def test_concurrent_construction_of_a_fresh_store_succeeds(tmp_path):
+    root = tmp_path / "shared"
+    barrier = threading.Barrier(4)
+    failures = []
+
+    def construct():
+        barrier.wait(5)
+        try:
+            AdmissionStore(root)
+        except Exception as error:  # noqa: BLE001 - the failure itself is the finding
+            failures.append(error)
+
+    workers = [threading.Thread(target=construct) for _ in range(4)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(5)
+
+    assert failures == []
+    assert (root / "bundles").is_dir() and (root / "index").is_dir()
