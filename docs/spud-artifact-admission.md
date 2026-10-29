@@ -152,9 +152,10 @@ artifacts with digests, source coverage and limitations. Status is explicit
 (`ok`, `partial`, `not_found`, `unavailable`, `invalid_request`): a bundle with
 any limitation, or declared partial source coverage, answers `partial`, so an
 incomplete bundle can never be read as repository-wide absence. Pages are bounded at 50 records by default with a
-visible `continuation` token bound to the bundle receipt, the query and the page
-size; replaying a token against a different bundle, query or page size is
-`invalid_request`.
+visible `continuation` token bound to the bundle receipt, the selector, the
+query and the page size; replaying a token against a different bundle, query or
+page size is `invalid_request`, while paging with a fresh `request_id` per call
+is supported.
 
 ## Safety limits
 

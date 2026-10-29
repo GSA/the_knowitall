@@ -135,6 +135,16 @@ def _envelope(request: Mapping[str, object], status: str) -> dict[str, object]:
     }
 
 
+def _binding_request(request: Mapping[str, object]) -> dict[str, object]:
+    """Bind a continuation to the bundle, selector, query and page size only.
+
+    `request_id` identifies one call, not one result set, so it is normalized
+    out: a caller may page with a fresh `request_id` per request. The legacy
+    `knowitall.code-context/v1` service keeps its stricter binding.
+    """
+    return {**request, "request_id": None}
+
+
 class ArtifactQueryService:
     def __init__(self, store: AdmissionStore, page_size: int = 50, *, continuation_secret: bytes | None = None):
         if not isinstance(page_size, int) or isinstance(page_size, bool) or page_size < 1:
@@ -186,7 +196,13 @@ class ArtifactQueryService:
             return _envelope(request, "unavailable")
         try:
             offset = (
-                read_token(request["continuation"], request, receipt.receipt_digest, self.page_size, self.secret)
+                read_token(
+                    request["continuation"],
+                    _binding_request(request),
+                    receipt.receipt_digest,
+                    self.page_size,
+                    self.secret,
+                )
                 if "continuation" in request
                 else 0
             )
@@ -226,7 +242,9 @@ class ArtifactQueryService:
         response["missing_evidence"] = missing
         response["truncated"] = truncated
         response["continuation"] = (
-            issue_token(request, receipt.receipt_digest, self.page_size, next_offset, self.secret)
+            issue_token(
+                _binding_request(request), receipt.receipt_digest, self.page_size, next_offset, self.secret
+            )
             if truncated
             else None
         )

@@ -352,3 +352,16 @@ def test_declared_missing_reasons_are_constrained_to_the_published_vocabulary(ma
 
     with pytest.raises(DescriptorError, match="declared_missing reason is not supported"):
         load_descriptor(value)
+
+
+def test_pagination_survives_a_fresh_request_id_per_page(admitted_bundle):
+    store, _bundle, _receipt = admitted_bundle()
+    service = service_for(store, page_size=1)
+    query = {"kind": "artifact_path", "path": GRAPH_PATH}
+
+    first = service.execute(request_for(query, request_id="page-1"))
+    second = service.execute(request_for(query, request_id="page-2", continuation=first["continuation"]))
+
+    assert second["status"] == "ok"
+    assert second["request_id"] == "page-2"
+    assert second["records"][0]["record_id"] != first["records"][0]["record_id"]
