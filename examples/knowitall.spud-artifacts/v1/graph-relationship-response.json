@@ -1,0 +1,81 @@
+{
+  "contract": "knowitall.spud-artifacts/v1",
+  "request_id": "req-relationship",
+  "project_id": "project-a",
+  "repository_id": "repo-a",
+  "resolved": {
+    "bundle_id": "bundle-1",
+    "receipt_digest": "sha256:32bbd05bebb2099b0722eb5ace7a809538d5b39d1356bf6bb3d3d60eae8e9933",
+    "reader_profile": "spud-reader/v1",
+    "revision_binding": "asserted",
+    "bound_snapshot": null
+  },
+  "status": "ok",
+  "admission": {
+    "artifacts": [
+      {
+        "role": "article",
+        "path": "spud-out/markdown/analysis/structural-analysis.md",
+        "content_digest": "sha256:110f3078eaaa3384949791599d0ec4a13dcbe4e063b4e7b7bbd9e3454c7d8971"
+      },
+      {
+        "role": "citation_index",
+        "path": "spud-out/json/analysis/inputs/graph-index.json",
+        "content_digest": "sha256:14a831aa72b52d38b830c28d1b88a06805e56cf82ce2efc283da8d37b541240f"
+      },
+      {
+        "role": "graph",
+        "path": "graphify-out/graph.json",
+        "content_digest": "sha256:a673ba27a6d723504e15872681e4b5da91afcce4bfb9ee6b5304d063513680d6"
+      },
+      {
+        "role": "graph_report",
+        "path": "graphify-out/GRAPH_REPORT.md",
+        "content_digest": "sha256:5ef421e83261a6c72fc922547f22255569cbc09763990b1c3202c496a163083c"
+      },
+      {
+        "role": "okf_manifest",
+        "path": "spud-out/manifest.yaml",
+        "content_digest": "sha256:f23a1ce1a3a6919bcbeceb5ea0a2b47780fbd05d22110341abe118778cd78674"
+      },
+      {
+        "role": "run_manifest",
+        "path": "run-manifest.yaml",
+        "content_digest": "sha256:dc2ab31a0267d4b684b3100c5f898a357637c4c3df5a583f16093440dc040abc"
+      }
+    ],
+    "source_coverage": "unknown",
+    "limitations": []
+  },
+  "records": [
+    {
+      "record_id": "rel-b6334d2a752d4577d0bb9c8f814ca034b3ce3e9c5c21479d808ca3d73889d447",
+      "kind": "graph_relationship",
+      "grade": "recorded_artifact",
+      "name": "orders.submit calls store.save",
+      "subject": "orders.submit",
+      "object": "store.save",
+      "relation": "calls",
+      "text": null,
+      "source_reference": {
+        "path": "src/orders.py",
+        "start_line": 5,
+        "end_line": 6
+      },
+      "locator": {
+        "artifact_path": "graphify-out/graph.json",
+        "content_digest": "sha256:a673ba27a6d723504e15872681e4b5da91afcce4bfb9ee6b5304d063513680d6",
+        "pointer": "/edges/0",
+        "start_line": null,
+        "end_line": null
+      },
+      "attribution": {
+        "_origin": "ast",
+        "confidence": "EXTRACTED"
+      }
+    }
+  ],
+  "missing_evidence": [],
+  "truncated": false,
+  "continuation": null
+}
