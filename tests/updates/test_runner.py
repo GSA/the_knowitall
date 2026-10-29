@@ -37,6 +37,35 @@ def test_staged_restart_does_not_extract_again(generation_factory, tmp_path, mon
     assert instance.resume("a") == status
 
 
+def test_explicit_resubmission_rebinds_interrupted_unpublished_intent(generation_factory, tmp_path, monkeypatch):
+    from knowitall_publication import PublicationConflict, PublicationInterrupted
+
+    generation, snapshot = generation_factory()
+    instance = runner(tmp_path, monkeypatch, generation)
+    instance.submit("original", snapshot, expected_current=None)
+    with pytest.raises(PublicationInterrupted):
+        instance.resume("original", failpoint="before_current_replace")
+    other, _ = generation_factory(fixture="typescript_client")
+    store = instance.ledger.store
+    predecessor = store.publish(store.stage(other), expected_current=None).generation
+    with pytest.raises(PublicationConflict):
+        instance.resume("original")
+    with pytest.raises(PublicationConflict):
+        store.publish(store.stage(generation))
+    assert store.resolve_current("project-a", "repo-a") == predecessor
+
+    instance.submit("resubmitted", snapshot, expected_current=predecessor)
+    import knowitall_updates.runner as module
+    monkeypatch.setattr(module, "extract_generation", lambda *args: pytest.fail("resubmission must reuse checkpoint"))
+    status = instance.resume("resubmitted")
+    assert status.phase == "published"
+    assert status.receipt.generation.generation_id == generation.generation_id
+    assert store.resolve_current("project-a", "repo-a") == status.receipt.generation
+    assert instance.resume("resubmitted") == status
+    assert store.publish(store.stage(other)).generation == predecessor
+    assert store.resolve_current("project-a", "repo-a") == status.receipt.generation
+
+
 def test_incomplete_inventory_blocks_without_selecting_empty_graph(generation_factory, tmp_path, monkeypatch):
     generation, snapshot = generation_factory()
     instance = runner(tmp_path, monkeypatch, generation)
