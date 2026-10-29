@@ -84,6 +84,20 @@ partial. A partial result is successful evidence with explicit limitations, not
 complete repository coverage. Extracted calls/imports are static evidence, not
 proof of runtime behavior or business meaning.
 
+## Local query transport
+
+`QueryService` is the in-process API. `serve_stdio(service, input, output)` adds
+a minimal local newline-delimited JSON boundary for Engineer or another local
+consumer: each input line is one v1 request and produces exactly one compact v1
+response line. Malformed JSON or a non-object request produces an explicit
+`invalid_request` packet and does not terminate the stream. The service resolves
+only atomically published generations, echoes immutable identities, and exposes
+partial, stale, ambiguous, unavailable, and paginated results unchanged.
+
+This adapter is not an MCP server, authenticated network endpoint, generic
+provider framework, or deployment service. A future transport may wrap the same
+v1 request/response API without changing evidence semantics.
+
 ## Temporary state and cleanup
 
 Pytest creates repositories, snapshots, extraction output, and publication stores
