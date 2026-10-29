@@ -2,9 +2,11 @@ import hashlib
 import json
 import stat
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
+import knowitall_spud.store as store_module
 from knowitall_spud.records import normalize_bundle
 from knowitall_spud.store import (
     AdmissionConflict,
@@ -340,3 +342,18 @@ def test_metadata_with_a_null_artifact_path_is_reported_as_damage(tmp_path, admi
 
     store.discard_damaged("project-a", "repo-a", "bundle-1")
     assert store.admit(bundle) == receipt
+
+
+def test_a_new_index_directory_is_persisted_before_acknowledgement(tmp_path, admitted_bundle, monkeypatch):
+    synced = []
+    monkeypatch.setattr(store_module, "_fsync_directory", lambda path: synced.append(Path(path)))
+
+    target, bundle, _receipt = admitted_bundle(store=AdmissionStore(tmp_path / "fresh"))
+    index_root = target.root / "index"
+
+    project_index = target._index_path("project-a", "repo-a")
+    assert index_root in synced
+    assert synced.index(index_root) < synced.index(project_index)
+    synced.clear()
+    target.admit(bundle)
+    assert index_root not in synced
