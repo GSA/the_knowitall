@@ -58,6 +58,31 @@ class GraphGeneration:
     exclusions: tuple[tuple[str, str], ...] = ()
 
 
+def normalized_metadata_digest(generation: GraphGeneration) -> str:
+    value = {
+        "snapshot": generation.snapshot.__dict__,
+        "artifact_digest": generation.artifact_digest,
+        "state": generation.state,
+        "coverage": generation.coverage.__dict__,
+        "nodes": [node.__dict__ | {"source_range": node.source_range.__dict__} for node in generation.nodes],
+        "edges": [edge.__dict__ | {"source_range": edge.source_range.__dict__} for edge in generation.edges],
+        "failed_files": generation.failed_files,
+        "engine_identity": generation.engine_identity,
+        "runtime_identity": generation.runtime_identity,
+        "config_identity": generation.config_identity,
+        "model_routes_enabled": generation.model_routes_enabled,
+        "inventory_failures": generation.inventory_failures,
+        "exclusions": generation.exclusions,
+    }
+    canonical = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
+def expected_generation_id(generation: GraphGeneration) -> str:
+    identity = "\0".join((generation.snapshot.snapshot_id, generation.artifact_digest, generation.engine_identity, generation.runtime_identity, generation.config_identity, normalized_metadata_digest(generation)))
+    return "gen-" + hashlib.sha256(identity.encode()).hexdigest()
+
+
 def _range(value: dict, label: str) -> SourceRange:
     try:
         start, end = value["start"], value["end"]
@@ -149,10 +174,9 @@ def normalize_generation(snapshot: SnapshotManifest, raw_artifact: bytes, *, exp
     limitations.update(item.get("reason", "inventory_failure") for item in snapshot.failed)
     coverage = Coverage("complete" if snapshot.inventory_complete else "partial", extraction, state, tuple(sorted(limitations)))
     snapshot_ref = SnapshotRef(snapshot.project_id, snapshot.repository_id, snapshot.snapshot_id, snapshot.commit, snapshot.content_manifest_digest)
-    identity = "\0".join((snapshot.snapshot_id, digest, ENGINE_IDENTITY, RUNTIME_IDENTITY, CONFIG_IDENTITY))
-    generation_id = "gen-" + hashlib.sha256(identity.encode()).hexdigest()
     inventory_failures = tuple(sorted((item.get("path", "."), item.get("reason", "inventory_failure")) for item in snapshot.failed))
-    return GraphGeneration(snapshot_ref, generation_id, digest, state, coverage, tuple(sorted(nodes, key=lambda item: item.symbol_id)), tuple(sorted(edges, key=lambda item: item.evidence_id)), tuple(sorted(failed.items())), raw_artifact, inventory_failures=inventory_failures, exclusions=exclusions)
+    generation = GraphGeneration(snapshot_ref, "", digest, state, coverage, tuple(sorted(nodes, key=lambda item: item.symbol_id)), tuple(sorted(edges, key=lambda item: item.evidence_id)), tuple(sorted(failed.items())), raw_artifact, inventory_failures=inventory_failures, exclusions=exclusions)
+    return GraphGeneration(**(generation.__dict__ | {"generation_id": expected_generation_id(generation)}))
 
 
 def extract_generation(snapshot: SnapshotManifest, source_dir: Path, staging_dir: Path, config: GraphifyConfig) -> GraphGeneration:
@@ -166,11 +190,10 @@ def extract_generation(snapshot: SnapshotManifest, source_dir: Path, staging_dir
     generation = normalize_generation(snapshot, canonical)
     native_digest = "sha256:" + hashlib.sha256(raw_artifact).hexdigest()
     config_identity = "sha256:" + hashlib.sha256((CONFIG_IDENTITY + "\0" + receipt.executable_digest).encode()).hexdigest()
-    identity = "\0".join((snapshot.snapshot_id, native_digest, receipt.engine_identity, receipt.runtime_identity, config_identity))
-    generation_id = "gen-" + hashlib.sha256(identity.encode()).hexdigest()
-    return GraphGeneration(
-        generation.snapshot, generation_id, native_digest, generation.state,
+    extracted = GraphGeneration(
+        generation.snapshot, "", native_digest, generation.state,
         generation.coverage, generation.nodes, generation.edges, generation.failed_files,
         raw_artifact, receipt.engine_identity, receipt.runtime_identity, config_identity,
         inventory_failures=generation.inventory_failures, exclusions=generation.exclusions,
     )
+    return GraphGeneration(**(extracted.__dict__ | {"generation_id": expected_generation_id(extracted)}))
