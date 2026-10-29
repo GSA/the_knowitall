@@ -22,9 +22,11 @@ def durable_directory(path: Path) -> None:
     if not path.exists():
         durable_directory(path.parent)
         path.mkdir(exist_ok=True)
-        fsync_directory(path.parent)
     if path.is_symlink() or not path.is_dir():
         raise ValueError("durable directory must be a real directory")
+    # An existing directory may be a mkdir left by interrupted initialization.
+    # Persist its parent entry on reopening as well as on first creation.
+    fsync_directory(path.parent)
 
 
 def atomic_write(path: Path, data: bytes) -> None:
