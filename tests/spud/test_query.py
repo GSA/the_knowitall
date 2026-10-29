@@ -379,3 +379,32 @@ def test_invalid_identities_are_echoed_as_null_in_the_invalid_request_envelope(a
     assert response["status"] == "invalid_request"
     assert response["request_id"] is None
     validate_artifact_response(response)
+
+
+@pytest.mark.parametrize("request_id", ["   ", "\t"])
+def test_whitespace_only_request_identity_is_rejected_as_invalid(admitted_bundle, request_id):
+    store, _bundle, _receipt = admitted_bundle()
+    service = service_for(store)
+    request = request_for({"kind": "artifact_path", "path": GRAPH_PATH}, request_id=request_id)
+
+    response = service.execute(request)
+
+    assert response["status"] == "invalid_request"
+    assert response["request_id"] is None
+    validate_artifact_response(response)
+    with pytest.raises(ArtifactQueryValidationError):
+        validate_artifact_request(request)
+
+
+@pytest.mark.parametrize("version", ["", "   "])
+def test_blank_supplied_generator_version_stays_unknown(admitted_bundle, version):
+    store, _bundle, _receipt = admitted_bundle(supplied={"generator_version": version, "run_id": "run-1"})
+    service = service_for(store)
+
+    response = service.execute(request_for({"kind": "artifact_path", "path": GRAPH_PATH}))
+
+    assert response["status"] == "partial"
+    assert {"kind": "provenance", "scope": "descriptor.supplied", "reason": "unknown_generator_version"} in (
+        response["missing_evidence"]
+    )
+    validate_artifact_response(response)

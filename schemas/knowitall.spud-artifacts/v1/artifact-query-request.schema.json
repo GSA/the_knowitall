@@ -19,7 +19,7 @@
     "continuation": {"type": "string", "minLength": 1}
   },
   "$defs": {
-    "identity": {"type": "string", "minLength": 1},
+    "identity": {"type": "string", "minLength": 1, "pattern": "\\S"},
     "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(/|$))[^/]+(?:/[^/]+)*$"}
   }
 }
