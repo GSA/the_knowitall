@@ -9,12 +9,15 @@ from knowitall_spud.query import (
     validate_artifact_request,
     validate_artifact_response,
 )
+from knowitall_spud.descriptor import DescriptorError, load_descriptor
 from knowitall_spud.store import AdmissionStore
 
 from conftest import (
     CITATION_INDEX_PATH,
     GRAPH_PATH,
     GRAPH_REPORT_PATH,
+    SOURCE_EVIDENCE_PATH,
+    digest_of,
     normalize_bundle_at,
 )
 
@@ -258,3 +261,94 @@ def test_revision_binding_is_visible_in_every_response(admitted_bundle, make_bun
     asserted = service_for(asserted_store).execute(request_for(relationships()))
     assert asserted["resolved"]["revision_binding"] == "asserted"
     assert asserted["resolved"]["bound_snapshot"] is None
+
+
+def bound_value(bundle_root, value, *, source_coverage):
+    value["source_binding"] = {
+        "graph_digest": digest_of(bundle_root / GRAPH_PATH),
+        "snapshot_id": "snapshot-1",
+        "commit_sha": "1" * 40,
+        "content_manifest_digest": digest_of(bundle_root / SOURCE_EVIDENCE_PATH),
+        "content_manifest_path": SOURCE_EVIDENCE_PATH,
+        "source_coverage": source_coverage,
+    }
+    return value
+
+
+def test_declared_partial_source_coverage_is_never_answered_as_absence(tmp_path, make_bundle):
+    evidence = {
+        "snapshot_id": "snapshot-1",
+        "files": [
+            {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
+            {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},
+        ],
+    }
+    bundle_root, value = make_bundle(citation_index=True, source_evidence=evidence)
+    bundle = normalize_bundle_at(bundle_root, bound_value(bundle_root, value, source_coverage="partial"))
+    assert bundle.limitations == ()
+    assert bundle.source_coverage == "partial"
+    store = AdmissionStore(tmp_path / "partial-coverage")
+    store.admit(bundle)
+    service = service_for(store)
+
+    found = service.execute(request_for(relationships()))
+    absent = service.execute(request_for(relationships(symbol_id="absent.symbol")))
+
+    assert found["status"] == "partial"
+    assert absent["status"] == "partial"
+    assert reasons(absent) == {"partial_source_coverage"}
+    assert {item["kind"] for item in absent["missing_evidence"]} == {"coverage"}
+    validate_artifact_response(absent, expected_request=request_for(relationships(symbol_id="absent.symbol")))
+
+
+def test_complete_declared_source_coverage_still_answers_ok(tmp_path, make_bundle):
+    evidence = {
+        "snapshot_id": "snapshot-1",
+        "files": [
+            {"path": "src/orders.py", "content_digest": "sha256:" + "2" * 64},
+            {"path": "src/store.py", "content_digest": "sha256:" + "3" * 64},
+        ],
+    }
+    bundle_root, value = make_bundle(citation_index=True, source_evidence=evidence)
+    bundle = normalize_bundle_at(bundle_root, bound_value(bundle_root, value, source_coverage="complete"))
+    store = AdmissionStore(tmp_path / "complete-coverage")
+    store.admit(bundle)
+
+    response = service_for(store).execute(request_for(relationships()))
+
+    assert response["status"] == "ok"
+    assert response["missing_evidence"] == []
+
+
+def test_invalid_request_envelope_validates_against_the_published_schema(admitted_bundle):
+    store, _bundle, _receipt = admitted_bundle()
+
+    response = service_for(store).execute({"contract": "other/v1"})
+
+    assert response["status"] == "invalid_request"
+    assert (response["request_id"], response["project_id"], response["repository_id"]) == (None, None, None)
+    validate_artifact_response(response)
+
+
+def test_paged_records_equal_the_unpaged_selection_in_order(admitted_bundle):
+    store, _bundle, _receipt = admitted_bundle(citation_index=True)
+    query = {"kind": "artifact_path", "path": GRAPH_PATH}
+
+    unpaged = service_for(store).execute(request_for(query))["records"]
+    service = service_for(store, page_size=1)
+    paged = []
+    response = service.execute(request_for(query))
+    paged.extend(response["records"])
+    while response["continuation"] is not None:
+        response = service.execute(request_for(query, continuation=response["continuation"]))
+        paged.extend(response["records"])
+
+    assert [record["record_id"] for record in paged] == [record["record_id"] for record in unpaged]
+
+
+def test_declared_missing_reasons_are_constrained_to_the_published_vocabulary(make_bundle):
+    _root, value = make_bundle()
+    value["declared_missing"] = [["spud-out/json/analysis/inputs/graph-index.json", "no_such_reason"]]
+
+    with pytest.raises(DescriptorError, match="declared_missing reason is not supported"):
+        load_descriptor(value)

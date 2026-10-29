@@ -6,9 +6,9 @@
   "required": ["contract", "request_id", "project_id", "repository_id", "resolved", "status", "admission", "records", "missing_evidence", "truncated", "continuation"],
   "properties": {
     "contract": {"const": "knowitall.spud-artifacts/v1"},
-    "request_id": {"$ref": "#/$defs/identity"},
-    "project_id": {"$ref": "#/$defs/identity"},
-    "repository_id": {"$ref": "#/$defs/identity"},
+    "request_id": {"$ref": "#/$defs/optional_identity"},
+    "project_id": {"$ref": "#/$defs/optional_identity"},
+    "repository_id": {"$ref": "#/$defs/optional_identity"},
     "resolved": {"oneOf": [{"type": "null"}, {
       "type": "object", "additionalProperties": false,
       "required": ["bundle_id", "receipt_digest", "reader_profile", "revision_binding", "bound_snapshot"],
@@ -42,13 +42,14 @@
     "missing_evidence": {"type": "array", "items": {
       "type": "object", "additionalProperties": false,
       "required": ["kind", "scope", "reason"],
-      "properties": {"kind": {"enum": ["artifact", "binding", "provenance"]}, "scope": {"$ref": "#/$defs/identity"}, "reason": {"$ref": "#/$defs/identity"}}
+      "properties": {"kind": {"enum": ["artifact", "binding", "coverage", "provenance"]}, "scope": {"$ref": "#/$defs/identity"}, "reason": {"$ref": "#/$defs/identity"}}
     }},
     "truncated": {"type": "boolean"},
     "continuation": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]}
   },
   "$defs": {
     "identity": {"type": "string", "minLength": 1},
+    "optional_identity": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]},
     "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(/|$))[^/]+(?:/[^/]+)*$"},
     "locator": {

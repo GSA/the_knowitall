@@ -37,6 +37,32 @@ OKF_MANIFEST_PATH = "spud-out/manifest.yaml"
 RUN_MANIFEST_PATH = "run-manifest.yaml"
 CURRENT_ARTICLE_ROOT = "spud-out/markdown"
 LEGACY_ARTICLE_ROOT = "spud-out"
+LIMITATION_REASONS = (
+    "invalid_citation_records",
+    "invalid_graph_records",
+    "malformed_citation_index",
+    "malformed_graph_json",
+    "missing_archive",
+    "missing_article",
+    "missing_bound_graph",
+    "missing_citation_index",
+    "missing_graph",
+    "missing_graph_report",
+    "missing_okf_manifest",
+    "missing_run_manifest",
+    "missing_source_evidence",
+    "no_articles_selected",
+    "skipped_uploads",
+    "unbound_graph_source_files",
+    "undecodable_narrative_text",
+    "unknown_generator_version",
+    "unreadable_manifest_fields",
+    "unsupported_artifact_format",
+    "unsupported_citation_profile",
+    "unsupported_graph_profile",
+    "unverified_source_binding",
+)
+
 EXCLUDED_ARTICLE_PREFIXES = ("spud-out/site/", "spud-out/json/")
 
 _DESCRIPTOR_KEYS = frozenset(
@@ -107,7 +133,7 @@ def _string_map(value: Mapping[str, object], key: str) -> dict[str, str]:
     return result
 
 
-def _pairs(value: Mapping[str, object], key: str) -> tuple[tuple[str, str], ...]:
+def _pairs(value: Mapping[str, object], key: str, *, reasons: tuple[str, ...] | None = None) -> tuple[tuple[str, str], ...]:
     raw = value.get(key, ())
     if raw is None:
         raw = ()
@@ -123,6 +149,8 @@ def _pairs(value: Mapping[str, object], key: str) -> tuple[tuple[str, str], ...]
             raise DescriptorError(f"descriptor {key} must be a sequence of (scope, reason) pairs")
         if not isinstance(scope, str) or not isinstance(reason, str) or not scope or not reason:
             raise DescriptorError(f"descriptor {key} entries must be nonempty strings")
+        if reasons is not None and reason not in reasons:
+            raise DescriptorError(f"descriptor {key} reason is not supported: {reason!r}")
         pairs.append((scope, reason))
     return tuple(sorted(set(pairs)))
 
@@ -191,7 +219,7 @@ def load_descriptor(value: Mapping[str, object]) -> AdmissionDescriptor:
         artifacts=artifacts,
         supplied=_string_map(value, "supplied"),
         expected_digests=expected_digests,
-        declared_missing=_pairs(value, "declared_missing"),
+        declared_missing=_pairs(value, "declared_missing", reasons=LIMITATION_REASONS),
         source_binding=dict(source_binding) if source_binding is not None else None,
     )
 
