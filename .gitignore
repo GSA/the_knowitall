@@ -9,3 +9,8 @@ graphify-out/
 __pycache__/
 pytest-of-*/
 .venv/
+/.roborev.toml
+/.roborev/
+/.superpowers/
+/AGENTS.override.md
+

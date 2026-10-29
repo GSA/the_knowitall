@@ -19,10 +19,9 @@ def reconstruct(snapshot, raw, identities):
     value = json.loads(raw)
     canonical = raw if "source_snapshot_id" in value else native_graphify_payload(snapshot, raw)
     generation = normalize_generation(snapshot, canonical)
-    import hashlib
-    artifact_digest = digest(raw)
-    identity = "\0".join((snapshot.snapshot_id, artifact_digest, *identities))
-    return replace(generation, generation_id="gen-" + hashlib.sha256(identity.encode()).hexdigest(), artifact_digest=artifact_digest, raw_artifact=raw, engine_identity=identities[0], runtime_identity=identities[1], config_identity=identities[2])
+    from knowitall_graphify.normalize import expected_generation_id
+    rebuilt = replace(generation, artifact_digest=digest(raw), raw_artifact=raw, engine_identity=identities[0], runtime_identity=identities[1], config_identity=identities[2])
+    return replace(rebuilt, generation_id=expected_generation_id(rebuilt))
 
 
 def commit(ledger, request_id: str, output_dir: Path, generation) -> None:

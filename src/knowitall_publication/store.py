@@ -21,7 +21,7 @@ def _serialized(method):
     return wrapped
 
 from knowitall_contract import Coverage, GenerationRef, SnapshotRef, SourceRange
-from knowitall_graphify import GraphEdge, GraphGeneration, GraphNode
+from knowitall_graphify import GraphEdge, GraphGeneration, GraphNode, expected_generation_id
 from knowitall_snapshot import SnapshotManifest
 from knowitall_graphify import validate_generation as validate_graph
 
@@ -305,8 +305,7 @@ class PublicationStore:
             raise PublicationValidationError("coverage and generation state disagree")
         if generation.state == "partial" and not generation.coverage.limitations:
             raise PublicationValidationError("partial generation requires coverage limitations")
-        identity = "\0".join((generation.snapshot.snapshot_id, generation.artifact_digest, generation.engine_identity, generation.runtime_identity, generation.config_identity))
-        if generation.generation_id != "gen-" + hashlib.sha256(identity.encode()).hexdigest():
+        if generation.generation_id != expected_generation_id(generation):
             raise PublicationValidationError("generation identity mismatch")
 
     @_serialized

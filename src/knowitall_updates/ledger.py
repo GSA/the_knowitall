@@ -41,7 +41,7 @@ def validate_snapshot(snapshot):
         if entry.path in paths or digest(entry.data) != entry.content_digest:
             raise UpdateValidationError("invalid admitted source bytes or duplicate path")
         paths.add(entry.path)
-    content = b"".join(entry.path.encode() + b"\0" + entry.content_digest.encode() + b"\0" for entry in snapshot.included)
+    content = b"".join(entry.path.encode() + b"\0" + entry.mode.encode() + b"\0" + entry.content_digest.encode() + b"\0" for entry in snapshot.included)
     if digest(content) != snapshot.content_manifest_digest:
         raise UpdateValidationError("content manifest digest mismatch")
     reference(snapshot)
@@ -82,6 +82,7 @@ class UpdateLedger:
                     target = temporary / "source" / entry.path
                     durable_directory(target.parent)
                     atomic_write(target, entry.data)
+                    target.chmod(0o755 if entry.mode == "100755" else 0o644)
                 atomic_write(temporary / "request.json", data)
                 atomic_write(temporary / "request.sha256", digest(data).encode())
                 atomic_write(temporary / "status.json", encode({"phase": "requested", "generation": None, "receipt": None, "reasons": []}))
