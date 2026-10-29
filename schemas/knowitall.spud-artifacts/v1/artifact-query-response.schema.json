@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "knowitall.spud-artifacts/v1/artifact-query-response.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "request_id", "project_id", "repository_id", "resolved", "status", "admission", "records", "missing_evidence", "truncated", "continuation"],
+  "properties": {
+    "contract": {"const": "knowitall.spud-artifacts/v1"},
+    "request_id": {"$ref": "#/$defs/identity"},
+    "project_id": {"$ref": "#/$defs/identity"},
+    "repository_id": {"$ref": "#/$defs/identity"},
+    "resolved": {"oneOf": [{"type": "null"}, {
+      "type": "object", "additionalProperties": false,
+      "required": ["bundle_id", "receipt_digest", "reader_profile", "revision_binding", "bound_snapshot"],
+      "properties": {
+        "bundle_id": {"$ref": "#/$defs/identity"},
+        "receipt_digest": {"$ref": "#/$defs/digest"},
+        "reader_profile": {"const": "spud-reader/v1"},
+        "revision_binding": {"enum": ["unknown", "asserted", "bound"]},
+        "bound_snapshot": {"oneOf": [{"type": "null"}, {
+          "type": "object", "additionalProperties": false,
+          "required": ["snapshot_id", "commit_sha", "content_manifest_digest"],
+          "properties": {"snapshot_id": {"$ref": "#/$defs/identity"}, "commit_sha": {"$ref": "#/$defs/identity"}, "content_manifest_digest": {"$ref": "#/$defs/digest"}}
+        }]}
+      }
+    }]},
+    "status": {"enum": ["ok", "partial", "not_found", "unavailable", "invalid_request"]},
+    "admission": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifacts", "source_coverage", "limitations"],
+      "properties": {
+        "artifacts": {"type": "array", "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["role", "path", "content_digest"],
+          "properties": {"role": {"enum": ["graph", "graph_report", "citation_index", "article", "okf_manifest", "run_manifest", "source_evidence"]}, "path": {"$ref": "#/$defs/path"}, "content_digest": {"$ref": "#/$defs/digest"}}
+        }},
+        "source_coverage": {"enum": ["complete", "partial", "unknown"]},
+        "limitations": {"type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/identity"}}}
+      }
+    },
+    "records": {"type": "array", "items": {"$ref": "#/$defs/record"}},
+    "missing_evidence": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "scope", "reason"],
+      "properties": {"kind": {"enum": ["artifact", "binding", "provenance"]}, "scope": {"$ref": "#/$defs/identity"}, "reason": {"$ref": "#/$defs/identity"}}
+    }},
+    "truncated": {"type": "boolean"},
+    "continuation": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]}
+  },
+  "$defs": {
+    "identity": {"type": "string", "minLength": 1},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(/|$))[^/]+(?:/[^/]+)*$"},
+    "locator": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifact_path", "content_digest", "pointer", "start_line", "end_line"],
+      "properties": {
+        "artifact_path": {"$ref": "#/$defs/path"},
+        "content_digest": {"$ref": "#/$defs/digest"},
+        "pointer": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]},
+        "start_line": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 1}]},
+        "end_line": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 2}]}
+      }
+    },
+    "source_reference": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "start_line", "end_line"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "start_line": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 1}]},
+        "end_line": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 2}]}
+      }
+    },
+    "record": {
+      "type": "object", "additionalProperties": false,
+      "required": ["record_id", "kind", "grade", "name", "subject", "object", "relation", "text", "source_reference", "locator", "attribution"],
+      "properties": {
+        "record_id": {"$ref": "#/$defs/identity"},
+        "kind": {"enum": ["graph_symbol", "graph_relationship", "citation_entry", "narrative_passage", "provenance_assertion"]},
+        "grade": {"enum": ["recorded_artifact", "recorded_citation", "generated_narrative", "retained_provenance"]},
+        "name": {"$ref": "#/$defs/identity"},
+        "subject": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/identity"}]},
+        "object": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/identity"}]},
+        "relation": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/identity"}]},
+        "text": {"oneOf": [{"type": "null"}, {"type": "string"}]},
+        "source_reference": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/source_reference"}]},
+        "locator": {"$ref": "#/$defs/locator"},
+        "attribution": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    }
+  }
+}

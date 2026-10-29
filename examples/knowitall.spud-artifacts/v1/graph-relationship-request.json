@@ -1,0 +1,18 @@
+{
+  "contract": "knowitall.spud-artifacts/v1",
+  "request_id": "req-relationship",
+  "project_id": "project-a",
+  "repository_id": "repo-a",
+  "selector": {
+    "mode": "bundle",
+    "bundle_id": "bundle-1"
+  },
+  "query": {
+    "kind": "relationships",
+    "symbol_id": "orders.submit",
+    "direction": "outgoing",
+    "relations": [
+      "calls"
+    ]
+  }
+}

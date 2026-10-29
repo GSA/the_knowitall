@@ -20,6 +20,13 @@ from .records import (
     normalize_bundle,
     read_flat_yaml,
 )
+from .query import (
+    ARTIFACT_CONTRACT,
+    ArtifactQueryService,
+    ArtifactQueryValidationError,
+    validate_artifact_request,
+    validate_artifact_response,
+)
 from .store import (
     AdmissionConflict,
     AdmissionInterrupted,
@@ -29,6 +36,7 @@ from .store import (
 )
 
 __all__ = [
+    "ARTIFACT_CONTRACT",
     "DESCRIPTOR_VERSION",
     "EVIDENCE_GRADES",
     "READER_PROFILE",
@@ -40,6 +48,8 @@ __all__ = [
     "AdmissionStore",
     "AdmissionValidationError",
     "ArtifactError",
+    "ArtifactQueryService",
+    "ArtifactQueryValidationError",
     "ArtifactRecord",
     "BundleLimits",
     "DescriptorError",
@@ -55,4 +65,6 @@ __all__ = [
     "read_flat_yaml",
     "resolve_artifacts",
     "safe_relative_path",
+    "validate_artifact_request",
+    "validate_artifact_response",
 ]

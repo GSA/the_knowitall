@@ -1,0 +1,119 @@
+{
+  "contract": "knowitall.spud-artifacts/v1",
+  "request_id": "req-citation",
+  "project_id": "project-a",
+  "repository_id": "repo-a",
+  "resolved": {
+    "bundle_id": "bundle-2",
+    "receipt_digest": "sha256:c728445410ed8dcb682d2bbec70ac9d2dd510d28cbc0accb2567789b4b350873",
+    "reader_profile": "spud-reader/v1",
+    "revision_binding": "asserted",
+    "bound_snapshot": null
+  },
+  "status": "partial",
+  "admission": {
+    "artifacts": [
+      {
+        "role": "article",
+        "path": "spud-out/markdown/analysis/structural-analysis.md",
+        "content_digest": "sha256:110f3078eaaa3384949791599d0ec4a13dcbe4e063b4e7b7bbd9e3454c7d8971"
+      },
+      {
+        "role": "citation_index",
+        "path": "spud-out/json/analysis/inputs/graph-index.json",
+        "content_digest": "sha256:14a831aa72b52d38b830c28d1b88a06805e56cf82ce2efc283da8d37b541240f"
+      },
+      {
+        "role": "okf_manifest",
+        "path": "spud-out/manifest.yaml",
+        "content_digest": "sha256:f23a1ce1a3a6919bcbeceb5ea0a2b47780fbd05d22110341abe118778cd78674"
+      },
+      {
+        "role": "run_manifest",
+        "path": "run-manifest.yaml",
+        "content_digest": "sha256:dc2ab31a0267d4b684b3100c5f898a357637c4c3df5a583f16093440dc040abc"
+      }
+    ],
+    "source_coverage": "unknown",
+    "limitations": [
+      [
+        "graphify-out/GRAPH_REPORT.md",
+        "missing_graph_report"
+      ],
+      [
+        "graphify-out/graph.json",
+        "missing_graph"
+      ]
+    ]
+  },
+  "records": [
+    {
+      "record_id": "cit-8fe4eac831ec2193c58f3180a7f96db211b14503fdb2a62b128ce2aacd8820b1",
+      "kind": "citation_entry",
+      "grade": "recorded_citation",
+      "name": "orders.submit",
+      "subject": null,
+      "object": null,
+      "relation": null,
+      "text": null,
+      "source_reference": {
+        "path": "src/orders.py",
+        "start_line": 4,
+        "end_line": 5
+      },
+      "locator": {
+        "artifact_path": "spud-out/json/analysis/inputs/graph-index.json",
+        "content_digest": "sha256:14a831aa72b52d38b830c28d1b88a06805e56cf82ce2efc283da8d37b541240f",
+        "pointer": "/0",
+        "start_line": null,
+        "end_line": null
+      },
+      "attribution": {
+        "community_name": "orders",
+        "file_type": "python",
+        "norm_label": "orders.submit"
+      }
+    },
+    {
+      "record_id": "cit-be8fc0dce4b44c96caff2a59d6e41d8bdd2f84e3c6e9da42b9e57f01ae9cb274",
+      "kind": "citation_entry",
+      "grade": "recorded_citation",
+      "name": "store.save",
+      "subject": null,
+      "object": null,
+      "relation": null,
+      "text": null,
+      "source_reference": {
+        "path": "src/store.py",
+        "start_line": 1,
+        "end_line": 2
+      },
+      "locator": {
+        "artifact_path": "spud-out/json/analysis/inputs/graph-index.json",
+        "content_digest": "sha256:14a831aa72b52d38b830c28d1b88a06805e56cf82ce2efc283da8d37b541240f",
+        "pointer": "/1",
+        "start_line": null,
+        "end_line": null
+      },
+      "attribution": {
+        "community_name": "storage",
+        "file_type": "python",
+        "norm_label": "store.save"
+      }
+    }
+  ],
+  "missing_evidence": [
+    {
+      "kind": "artifact",
+      "scope": "graphify-out/GRAPH_REPORT.md",
+      "reason": "missing_graph_report"
+    },
+    {
+      "kind": "artifact",
+      "scope": "graphify-out/graph.json",
+      "reason": "missing_graph"
+    }
+  ],
+  "truncated": false,
+  "continuation": null
+}
