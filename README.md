@@ -35,7 +35,7 @@ Evaluated baselines: SPUD `c80837a`, SPUD Web `8e9626d`, Graphify `0.9.96`
 | Capability | Approach |
 | --- | --- |
 | Graphify parsing and graph queries | Pinned dependency wrapped in Knowitall's snapshot and evidence contract |
-| Repository acquisition and graph publication | Knowitall implementation using Git and Graphify incremental extraction |
+| Repository intake and graph publication | Knowitall implementation using Git and Graphify incremental extraction |
 | Existing SPUD graph/technical outputs | Optional Knowitall admission adapter recording revision and coverage |
 | Jira/Confluence export and reconciliation | Librarian adapters over standalone exporters with durable retry and reconciliation |
 | Docling extraction | Librarian's existing offline Docling lifecycle plus qualified-retrieval admission |
